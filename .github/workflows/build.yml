@@ -26,9 +26,6 @@ jobs:
       - uses: Swatinem/rust-cache@v2
       - name: Build release binary
         run: cargo build --release --all-features
-      - name: Code sign macOS binary (ad-hoc)
-        if: matrix.os == 'macos-latest'
-        run: codesign -s - target/release/gh-log
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:

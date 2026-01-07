@@ -2,6 +2,18 @@
 
 View your GitHub PRs summary in a TUI or print to terminal.
 
+Do **not** use this tool to automatically generate performance review reports or similar with ChatGPT.
+
+## Installation
+
+### Homebrew
+```bash
+brew install rnaudi/tap/gh-log
+```
+
+### Releases
+See [Releases](https://github.com/rnaudi/gh-log/releases)
+
 ## What it does
 
 - Calculates lead time, frequency, and other metrics
@@ -31,27 +43,7 @@ Print PR summary directly to terminal:
 gh-log print --month 2025-01
 ```
 
-This outputs:
-- Month summary (total PRs, avg lead time, frequency)
-- PRs grouped by week
-- Repository summary
-
-## Input format
-
-JSON array with PR objects:
-- `number`: PR number
-- `title`: PR title
-- `repository.nameWithOwner`: Repository name
-- `createdAt`: ISO 8601 timestamp
-- `updatedAt`: ISO 8601 timestamp
-
-## Metrics
-
-- Lead time: time from PR creation to merge/update
-- Frequency: PRs per week
-- Aggregated by week and repository
-
-## Use cases
+## TODO: Advanced / Use cases
 
 ### Pull request tracking
 - Track PRs across repositories
@@ -85,5 +77,3 @@ JSON array with PR objects:
 - Use PR titles, lead times, and frequency to create accomplishment summaries
 - Track work across repos and time periods for performance reviews
 - Generate structured data for documenting projects and contributions
-
-## TODO
