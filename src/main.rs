@@ -49,7 +49,7 @@ fn main() -> anyhow::Result<()> {
         .arg("--author=@me")
         .arg(format!("--created={}", cli.month))
         .arg("--limit")
-        .arg("100")
+        .arg("200")
         .arg("--json")
         .arg("createdAt,number,repository,title,updatedAt,url")
         .output()?;
