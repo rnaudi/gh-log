@@ -1,0 +1,34 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_call:
+
+env:
+  RUST_BACKTRACE: 1
+
+jobs:
+  ci:
+    name: Run CI
+    uses: ./.github/workflows/ci.yml
+
+  build:
+    name: Build
+    needs: ci
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Build release binary
+        run: cargo build --release --all-features
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: gh-log-${{ matrix.os }}
+          path: target/release/gh-log${{ matrix.os == 'windows-latest' && '.exe' || '' }}
+          retention-days: 30
