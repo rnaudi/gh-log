@@ -359,7 +359,7 @@ pub fn render_detail(
                         format_duration(week.avg_lead_time)
                     );
 
-                    let table_data = build_pr_details_data(week_title, *prs);
+                    let table_data = build_pr_details_data(week_title, prs);
                     let table = table_data_to_widget(&table_data, 0);
                     frame.render_widget(table, detail_chunks[chunk_idx]);
                 }

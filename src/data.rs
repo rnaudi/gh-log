@@ -162,7 +162,7 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
     for pr in &pr_data {
         by_repo
             .entry(pr.repository.name_with_owner.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(pr.clone());
     }
 
