@@ -133,26 +133,28 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
     let data = data::process_prs(prs);
 
     println!("GitHub PRs for {}", month);
-    println!("Total PRs: {}", data.total_prs);
-    println!("Average Lead Time: {}", format_duration(data.avg_lead_time));
-    println!("Frequency: {:.1} PRs/week", data.frequency);
+    println!("  - Total PRs: {}", data.total_prs);
+    println!(
+        "  - Average Lead Time: {}",
+        format_duration(data.avg_lead_time)
+    );
+    println!("  - Frequency: {:.1} PRs/week", data.frequency);
     println!();
 
     for (week_idx, week) in data.weeks.iter().enumerate() {
         println!(
-            "Week {} ({} - {}) - {} PRs, Avg Lead Time: {}",
+            "Week {} ({} - {})",
             week.week_num,
             format_date(week.week_start),
-            format_date(week.week_end),
-            week.pr_count,
-            format_duration(week.avg_lead_time)
+            format_date(week.week_end)
         );
-        println!("{}", "=".repeat(80));
+        println!("  - PRs: {}", week.pr_count);
+        println!("  - Avg Lead Time: {}", format_duration(week.avg_lead_time));
 
         let prs = &data.prs_by_week[week_idx];
         for pr in prs {
             println!(
-                "{} | {} | #{} {} | Lead Time: {}",
+                "    - {} | {} | #{} {} | {}",
                 format_date(pr.created_at),
                 pr.repo,
                 pr.number,
@@ -163,11 +165,10 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
         println!();
     }
 
-    println!("Repository Summary");
-    println!("{}", "=".repeat(80));
+    println!("Repositories");
     for repo in &data.repos {
         println!(
-            "{:<40} | PRs: {:>3} | Avg Lead Time: {}",
+            "  - {} - {} PRs (Avg: {})",
             repo.name,
             repo.pr_count,
             format_duration(repo.avg_lead_time)
