@@ -30,6 +30,13 @@ jobs:
           path: artifacts
       - name: Display structure of downloaded files
         run: ls -R artifacts
+
+      - name: Rename artifacts to include platform
+        run: |
+          mv artifacts/gh-log-ubuntu-latest/gh-log artifacts/gh-log-ubuntu-latest/gh-log-x86_64-unknown-linux-gnu
+          mv artifacts/gh-log-macos-latest/gh-log artifacts/gh-log-macos-latest/gh-log-aarch64-apple-darwin
+          mv artifacts/gh-log-windows-latest/gh-log.exe artifacts/gh-log-windows-latest/gh-log-x86_64-pc-windows-msvc.exe
+
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
