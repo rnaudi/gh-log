@@ -18,9 +18,11 @@ jobs:
     needs: ci
     runs-on: ubuntu-latest
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/checkout@v4
+      - name: Download artifacts from build workflow
+        uses: dawidd6/action-download-artifact@v3
         with:
+          workflow: build.yml
           path: artifacts
       - name: Display structure of downloaded files
         run: ls -R artifacts
