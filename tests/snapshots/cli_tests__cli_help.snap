@@ -1,0 +1,11 @@
+---
+source: tests/cli_tests.rs
+expression: stdout
+---
+View your GitHub PRs summary in a TUI
+
+Usage: gh-log --month <YYYY-MM>
+
+Options:
+      --month <YYYY-MM>  Month in format YYYY-MM, e.g. 2025-11
+  -h, --help             Print help
