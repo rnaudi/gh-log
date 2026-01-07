@@ -17,7 +17,7 @@ pub struct RepoData {
     pub avg_lead_time: Duration,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PRDetail {
     pub created_at: DateTime<Utc>,
     pub repo: String,
