@@ -3,7 +3,7 @@ mod input;
 mod view;
 
 use anyhow::bail;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use crossterm::execute;
 use crossterm::terminal::{
@@ -15,15 +15,34 @@ use std::process::Command;
 
 #[derive(Parser)]
 #[command(name = "gh-log")]
-#[command(about = "View your GitHub PRs summary in a TUI", long_about = None)]
+#[command(about = "View your GitHub PRs summary", long_about = None)]
 struct Cli {
-    #[arg(
-        long,
-        value_name = "YYYY-MM",
-        help = "Month in format YYYY-MM, e.g. 2025-11",
-        value_parser = parser_month
-    )]
-    month: String,
+    #[command(subcommand)]
+    command: Commands,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Open interactive TUI to view PRs
+    View {
+        #[arg(
+            long,
+            value_name = "YYYY-MM",
+            help = "Month in format YYYY-MM, e.g. 2025-11",
+            value_parser = parser_month
+        )]
+        month: String,
+    },
+    /// Print PRs to terminal
+    Print {
+        #[arg(
+            long,
+            value_name = "YYYY-MM",
+            help = "Month in format YYYY-MM, e.g. 2025-11",
+            value_parser = parser_month
+        )]
+        month: String,
+    },
 }
 
 fn parser_month(s: &str) -> anyhow::Result<String> {
@@ -35,19 +54,12 @@ fn parser_month(s: &str) -> anyhow::Result<String> {
     }
 }
 
-fn main() -> anyhow::Result<()> {
-    let cli = Cli::parse();
-
-    enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen)?;
-
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-
+fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
     let output = Command::new("gh")
         .arg("search")
         .arg("prs")
         .arg("--author=@me")
-        .arg(format!("--created={}", cli.month))
+        .arg(format!("--created={}", month))
         .arg("--limit")
         .arg("200")
         .arg("--json")
@@ -56,6 +68,16 @@ fn main() -> anyhow::Result<()> {
 
     let json_str = String::from_utf8_lossy(&output.stdout);
     let prs: Vec<input::PullRequest> = serde_json::from_str(&json_str)?;
+    Ok(prs)
+}
+
+fn run_view_mode(month: &str) -> anyhow::Result<()> {
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen)?;
+
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+
+    let prs = fetch_prs(month)?;
     let data = data::process_prs(prs);
 
     let mut current_view = view::View::Summary;
@@ -104,4 +126,77 @@ fn main() -> anyhow::Result<()> {
     execute!(stdout(), LeaveAlternateScreen)?;
 
     Ok(())
+}
+
+fn run_print_mode(month: &str) -> anyhow::Result<()> {
+    let prs = fetch_prs(month)?;
+    let data = data::process_prs(prs);
+
+    println!("GitHub PRs for {}", month);
+    println!("Total PRs: {}", data.total_prs);
+    println!("Average Lead Time: {}", format_duration(data.avg_lead_time));
+    println!("Frequency: {:.1} PRs/week", data.frequency);
+    println!();
+
+    for (week_idx, week) in data.weeks.iter().enumerate() {
+        println!(
+            "Week {} ({} - {}) - {} PRs, Avg Lead Time: {}",
+            week.week_num,
+            format_date(week.week_start),
+            format_date(week.week_end),
+            week.pr_count,
+            format_duration(week.avg_lead_time)
+        );
+        println!("{}", "=".repeat(80));
+
+        let prs = &data.prs_by_week[week_idx];
+        for pr in prs {
+            println!(
+                "{} | {} | #{} {} | Lead Time: {}",
+                format_date(pr.created_at),
+                pr.repo,
+                pr.number,
+                pr.title,
+                format_duration(pr.lead_time)
+            );
+        }
+        println!();
+    }
+
+    println!("Repository Summary");
+    println!("{}", "=".repeat(80));
+    for repo in &data.repos {
+        println!(
+            "{:<40} | PRs: {:>3} | Avg Lead Time: {}",
+            repo.name,
+            repo.pr_count,
+            format_duration(repo.avg_lead_time)
+        );
+    }
+
+    Ok(())
+}
+
+fn format_duration(d: chrono::Duration) -> String {
+    let days = d.num_days();
+    let hours = d.num_hours() % 24;
+    let minutes = d.num_minutes() % 60;
+    match (days, hours, minutes) {
+        (d, h, _) if d > 0 => format!("{}d {}h", d, h),
+        (_, h, m) if h > 0 => format!("{}h {}m", h, m),
+        (_, _, m) => format!("{}m", m),
+    }
+}
+
+fn format_date(dt: chrono::DateTime<chrono::Utc>) -> String {
+    dt.format("%Y-%m-%d").to_string()
+}
+
+fn main() -> anyhow::Result<()> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Commands::View { month } => run_view_mode(&month),
+        Commands::Print { month } => run_print_mode(&month),
+    }
 }

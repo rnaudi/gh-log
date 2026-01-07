@@ -1,0 +1,10 @@
+---
+source: tests/cli_tests.rs
+expression: stderr
+---
+error: the following required arguments were not provided:
+  --month <YYYY-MM>
+
+Usage: gh-log view --month <YYYY-MM>
+
+For more information, try '--help'.

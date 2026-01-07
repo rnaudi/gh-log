@@ -1,21 +1,40 @@
 # gh-log
 
-View your GitHub PRs summary in a TUI.
+View your GitHub PRs summary in a TUI or print to terminal.
 
 ## What it does
 
 - Calculates lead time, frequency, and other metrics
 - Groups by month, week, and repository
-- Displays in interactive terminal view
+- Two modes: interactive TUI or terminal print
 
 ## Usage
 
-1. Run `cargo run`
-2. Navigate views:
-   - `s` - Summary view
-   - `d` - Detail view (PRs by week)
-   - `t` - Tail view (all PRs sorted by lead time)
-   - `q` - Quit
+### Interactive TUI Mode
+View PRs in an interactive terminal interface:
+
+```bash
+gh-log view --month 2025-01
+```
+
+Navigate views:
+- `s` - Summary view (weekly and repo stats)
+- `d` - Detail view (PRs grouped by week)
+- `t` - Tail view (all PRs sorted by lead time)
+- `↑↓` or `j/k` - Scroll
+- `q` - Quit
+
+### Print Mode
+Print PR summary directly to terminal:
+
+```bash
+gh-log print --month 2025-01
+```
+
+This outputs:
+- Month summary (total PRs, avg lead time, frequency)
+- PRs grouped by week
+- Repository summary
 
 ## Input format
 

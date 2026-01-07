@@ -1,8 +1,9 @@
-use assert_cmd::Command;
+use assert_cmd::cargo;
+use std::process::Command;
 
 #[test]
 fn test_cli_help() {
-    let mut cmd = Command::cargo_bin("gh-log").unwrap();
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
     let output = cmd.arg("--help").output().unwrap();
 
     let stdout = String::from_utf8_lossy(&output.stdout);
@@ -10,9 +11,82 @@ fn test_cli_help() {
 }
 
 #[test]
-fn test_invalid_date_format() {
-    let mut cmd = Command::cargo_bin("gh-log").unwrap();
-    let output = cmd.arg("--month").arg("2025/11").output().unwrap();
+fn test_cli_help_short_flag() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.arg("-h").output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    insta::assert_snapshot!(stdout);
+}
+
+#[test]
+fn test_view_help() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.arg("view").arg("--help").output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    insta::assert_snapshot!(stdout);
+}
+
+#[test]
+fn test_print_help() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.arg("print").arg("--help").output().unwrap();
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    insta::assert_snapshot!(stdout);
+}
+
+#[test]
+fn test_view_invalid_date_format() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd
+        .arg("view")
+        .arg("--month")
+        .arg("2025/11")
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
+fn test_print_invalid_date_format() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd
+        .arg("print")
+        .arg("--month")
+        .arg("2025/11")
+        .output()
+        .unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
+fn test_missing_subcommand() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.output().unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
+fn test_view_missing_month_argument() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.arg("view").output().unwrap();
+
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    insta::assert_snapshot!(stderr);
+}
+
+#[test]
+fn test_print_missing_month_argument() {
+    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
+    let output = cmd.arg("print").output().unwrap();
 
     let stderr = String::from_utf8_lossy(&output.stderr);
     insta::assert_snapshot!(stderr);

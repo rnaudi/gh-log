@@ -1,6 +1,6 @@
 ---
 source: tests/cli_tests.rs
-expression: stdout
+expression: stderr
 ---
 View your GitHub PRs summary
 
