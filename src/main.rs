@@ -96,9 +96,9 @@ fn run_view_mode(month: &str) -> anyhow::Result<()> {
             }
         }
 
-        if event::poll(std::time::Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press {
+        if event::poll(std::time::Duration::from_millis(100))? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press {
                     match key.code {
                         KeyCode::Char('q') | KeyCode::Esc => break,
                         KeyCode::Char('s') => {
@@ -118,6 +118,8 @@ fn run_view_mode(month: &str) -> anyhow::Result<()> {
                         _ => {}
                     }
                 }
+            }
+        }
     }
 
     disable_raw_mode()?;
