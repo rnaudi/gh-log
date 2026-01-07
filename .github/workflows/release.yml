@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+      version: ${{ steps.get_version.outputs.version }}
+    steps:
+      - name: Get version from tag
+        id: get_version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Create Release
+        id: create_release
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: ${{ github.ref_name }}
+          release_name: Release ${{ github.ref_name }}
+          draft: false
+          prerelease: false
+
+  build-macos-arm:
+    name: Build macOS ARM Binary
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build release binary
+        run: cargo build --release --target aarch64-apple-darwin
+
+      - name: Strip binary
+        run: strip target/aarch64-apple-darwin/release/gh-log
+
+      - name: Create archive
+        run: |
+          cd target/aarch64-apple-darwin/release
+          tar czf gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz gh-log
+          shasum -a 256 gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz > gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz.sha256
+
+      - name: Upload Release Asset
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/aarch64-apple-darwin/release/gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz
+          asset_name: gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz
+          asset_content_type: application/gzip
+
+      - name: Upload Checksum
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ needs.create-release.outputs.upload_url }}
+          asset_path: target/aarch64-apple-darwin/release/gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz.sha256
+          asset_name: gh-log-${{ needs.create-release.outputs.version }}-aarch64-apple-darwin.tar.gz.sha256
+          asset_content_type: text/plain
