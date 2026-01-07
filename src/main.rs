@@ -98,26 +98,27 @@ fn run_view_mode(month: &str) -> anyhow::Result<()> {
 
         if event::poll(std::time::Duration::from_millis(100))?
             && let Event::Key(key) = event::read()?
-                && key.kind == KeyEventKind::Press {
-                    match key.code {
-                        KeyCode::Char('q') | KeyCode::Esc => break,
-                        KeyCode::Char('s') => {
-                            current_view = view::View::Summary;
-                            scroll_state.reset();
-                        }
-                        KeyCode::Char('d') => {
-                            current_view = view::View::Detail;
-                            scroll_state.reset();
-                        }
-                        KeyCode::Char('t') => {
-                            current_view = view::View::Tail;
-                            scroll_state.reset();
-                        }
-                        KeyCode::Up | KeyCode::Char('k') => scroll_state.scroll_up(),
-                        KeyCode::Down | KeyCode::Char('j') => scroll_state.scroll_down(),
-                        _ => {}
-                    }
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                KeyCode::Char('s') => {
+                    current_view = view::View::Summary;
+                    scroll_state.reset();
                 }
+                KeyCode::Char('d') => {
+                    current_view = view::View::Detail;
+                    scroll_state.reset();
+                }
+                KeyCode::Char('t') => {
+                    current_view = view::View::Tail;
+                    scroll_state.reset();
+                }
+                KeyCode::Up | KeyCode::Char('k') => scroll_state.scroll_up(),
+                KeyCode::Down | KeyCode::Char('j') => scroll_state.scroll_down(),
+                _ => {}
+            }
+        }
     }
 
     disable_raw_mode()?;
