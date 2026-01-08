@@ -51,7 +51,7 @@ gh-log print --month 2025-01
 - Group by month, week, and repository
 - Useful for work logs and performance reviews
 
-### Code review tracking
+### Idea: Code review tracking
 - Create PRs in a private repo with title pattern: `Review: owner/repo#123`
 - Track lead time from approval to merge
 - Filter by title pattern to separate reviews from regular work
@@ -61,7 +61,7 @@ gh-log print --month 2025-01
 - Track lead time from creation to merge
 - Shows up in work log metrics
 
-### Conventional commits
+### Idea: (probably not going to implement) Conventional commits
 - Filter PRs by title patterns: `fix:`, `feat:`, `refactor:`, `docs:`, etc.
 - Track lead time for bug fixes vs features
 - Compare frequency and velocity by commit type
