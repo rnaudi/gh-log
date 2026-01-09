@@ -24,6 +24,9 @@ pub struct PRDetail {
     pub number: u32,
     pub title: String,
     pub lead_time: Duration,
+    pub additions: u32,
+    pub deletions: u32,
+    pub changed_files: u32,
 }
 
 #[derive(Debug)]
@@ -70,6 +73,9 @@ struct PRData {
     created_at: DateTime<Utc>,
     lead_time: Duration,
     repository: Repository,
+    additions: u32,
+    deletions: u32,
+    changed_files: u32,
 }
 
 // Internal repository struct
@@ -102,6 +108,9 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
             repository: Repository {
                 name_with_owner: pr.repository.name_with_owner.clone(),
             },
+            additions: pr.additions,
+            deletions: pr.deletions,
+            changed_files: pr.changed_files,
         });
     }
 
@@ -207,6 +216,9 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
                     number: pr.number,
                     title: pr.title.clone(),
                     lead_time: pr.lead_time,
+                    additions: pr.additions,
+                    deletions: pr.deletions,
+                    changed_files: pr.changed_files,
                 })
                 .collect()
         })

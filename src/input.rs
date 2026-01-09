@@ -16,6 +16,10 @@ pub struct PullRequest {
     pub created_at: DateTime<Utc>,
     #[serde(rename = "updatedAt")]
     pub updated_at: DateTime<Utc>,
+    pub additions: u32,
+    pub deletions: u32,
+    #[serde(rename = "changedFiles")]
+    pub changed_files: u32,
 }
 
 #[cfg(test)]
@@ -63,17 +67,34 @@ pub mod prop_strategies {
             repository_strategy(),
             datetime_strategy(),
             0i64..=(7 * 24 * 3600),
+            0u32..5000,
+            0u32..5000,
+            1u32..100,
         )
-            .prop_map(|(number, title, repository, created_at, lead_time_secs)| {
-                let updated_at = created_at + chrono::Duration::seconds(lead_time_secs);
-                PullRequest {
+            .prop_map(
+                |(
                     number,
                     title,
                     repository,
                     created_at,
-                    updated_at,
-                }
-            })
+                    lead_time_secs,
+                    additions,
+                    deletions,
+                    changed_files,
+                )| {
+                    let updated_at = created_at + chrono::Duration::seconds(lead_time_secs);
+                    PullRequest {
+                        number,
+                        title,
+                        repository,
+                        created_at,
+                        updated_at,
+                        additions,
+                        deletions,
+                        changed_files,
+                    }
+                },
+            )
     }
 
     pub fn pull_requests_strategy(

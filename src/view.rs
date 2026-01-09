@@ -147,6 +147,7 @@ fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
         "Repository".to_string(),
         "PR".to_string(),
         "Lead Time".to_string(),
+        "Size".to_string(),
     ];
     let rows = prs
         .iter()
@@ -156,6 +157,7 @@ fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
                 pr.repo.clone(),
                 format!("{} {}", pr.number, pr.title),
                 format_duration(pr.lead_time),
+                format!("+{}-{} ~{}", pr.additions, pr.deletions, pr.changed_files),
             ]
         })
         .collect();
