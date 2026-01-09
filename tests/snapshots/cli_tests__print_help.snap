@@ -4,8 +4,9 @@ expression: stdout
 ---
 Print PRs to terminal
 
-Usage: gh-log print --month <YYYY-MM>
+Usage: gh-log print [OPTIONS] --month <YYYY-MM>
 
 Options:
       --month <YYYY-MM>  Month in format YYYY-MM, e.g. 2025-11
+      --force            Force refresh data from GitHub API, bypassing cache
   -h, --help             Print help

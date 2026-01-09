@@ -105,6 +105,13 @@ impl RepoData {
     }
 }
 
+/// Reviewer information showing who reviewed PRs.
+#[derive(Debug, Clone)]
+pub struct ReviewerData {
+    pub login: String,
+    pub pr_count: usize,
+}
+
 /// Detailed information about a single pull request.
 #[derive(Debug, Clone)]
 pub struct PRDetail {
@@ -139,6 +146,8 @@ pub struct MonthData {
     pub weeks: Vec<WeekData>,
     pub repos: Vec<RepoData>,
     pub prs_by_week: Vec<Vec<PRDetail>>,
+    pub reviewers: Vec<ReviewerData>,
+    pub reviewed_count: usize,
 }
 
 impl Default for MonthData {
@@ -155,6 +164,8 @@ impl Default for MonthData {
             weeks: Vec::new(),
             repos: Vec::new(),
             prs_by_week: Vec::new(),
+            reviewers: Vec::new(),
+            reviewed_count: 0,
         }
     }
 }
@@ -201,7 +212,7 @@ struct Repository {
 /// Processes a list of pull requests and computes aggregated metrics.
 ///
 /// Groups PRs by week and repository, calculates lead times, and computes frequency.
-pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
+pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -> MonthData {
     if prs.is_empty() {
         return MonthData::default();
     }
@@ -386,6 +397,22 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
         }
     }
 
+    let mut reviewer_map: BTreeMap<String, usize> = BTreeMap::new();
+    for pr in &prs {
+        for review in &pr.reviews.nodes {
+            *reviewer_map.entry(review.author.login.clone()).or_insert(0) += 1;
+        }
+    }
+
+    let mut reviewers: Vec<ReviewerData> = reviewer_map
+        .iter()
+        .map(|(login, count)| ReviewerData {
+            login: login.clone(),
+            pr_count: *count,
+        })
+        .collect();
+    reviewers.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
+
     MonthData {
         month_start,
         total_prs: pr_data.len(),
@@ -398,6 +425,8 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>) -> MonthData {
         weeks: week_data,
         repos,
         prs_by_week: pr_details_by_week,
+        reviewers,
+        reviewed_count,
     }
 }
 
@@ -505,6 +534,8 @@ mod tests {
             weeks: Vec::new(),
             repos: Vec::new(),
             prs_by_week: Vec::new(),
+            reviewers: Vec::new(),
+            reviewed_count: 0,
         };
         assert_eq!(month.format_size_distribution(), "26S 3M 4L 1XL");
     }

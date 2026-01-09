@@ -148,6 +148,21 @@ fn build_repos_data(repos: &[RepoData]) -> TableData {
     }
 }
 
+fn build_reviewers_data(reviewers: &[crate::data::ReviewerData]) -> TableData {
+    let headers = vec!["Reviewer".to_string(), "PRs".to_string()];
+    let rows = reviewers
+        .iter()
+        .take(10)
+        .map(|r| vec![r.login.clone(), r.pr_count.to_string()])
+        .collect();
+
+    TableData {
+        title: "Top Reviewers".to_string(),
+        headers,
+        rows,
+    }
+}
+
 fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
     let headers = vec![
         "Date".to_string(),
@@ -216,6 +231,7 @@ pub fn render_summary(
             Constraint::Length(1),
             Constraint::Length(2),
             Constraint::Length(1),
+            Constraint::Length(1),
             Constraint::Min(0),
         ])
         .split(area);
@@ -261,24 +277,45 @@ pub fn render_summary(
             stats[3],
         );
 
+        // Review Activity
+        let review_ratio = if data.total_prs > 0 {
+            data.reviewed_count as f64 / data.total_prs as f64
+        } else {
+            0.0
+        };
+        let review_text = format!(
+            "My Review Activity: {} PRs reviewed | Review Balance: {:.1}:1",
+            data.reviewed_count, review_ratio
+        );
+        frame.render_widget(Paragraph::new(review_text), chunks[3]);
+
         // Tables
-        let layout = if area.width > 120 {
+        let layout = if area.width > 150 {
             Layout::horizontal([
-                Constraint::Percentage(50),
+                Constraint::Percentage(33),
                 Constraint::Length(1),
-                Constraint::Percentage(50),
+                Constraint::Percentage(34),
+                Constraint::Length(1),
+                Constraint::Percentage(33),
             ])
         } else {
             Layout::vertical([
                 Constraint::Min(0),
                 Constraint::Length(1),
                 Constraint::Min(0),
+                Constraint::Length(1),
+                Constraint::Min(0),
             ])
         };
-        let table_chunks = layout.split(chunks[3]);
+        let table_chunks = layout.split(chunks[4]);
 
         let viewport_height = table_chunks[0].height as usize;
-        let max_table_height = data.weeks.len().max(data.repos.len()) + 2;
+        let max_table_height = data
+            .weeks
+            .len()
+            .max(data.repos.len())
+            .max(data.reviewers.len())
+            + 2;
         scroll_state.set_viewport_height(viewport_height);
         scroll_state.set_content_height(max_table_height);
 
@@ -291,6 +328,10 @@ pub fn render_summary(
         let repos_data = build_repos_data(&data.repos);
         let repos_table = table_data_to_widget(&repos_data, scroll_offset);
         frame.render_widget(repos_table, table_chunks[2]);
+
+        let reviewers_data = build_reviewers_data(&data.reviewers);
+        let reviewers_table = table_data_to_widget(&reviewers_data, scroll_offset);
+        frame.render_widget(reviewers_table, table_chunks[4]);
     })?;
 
     Ok(())

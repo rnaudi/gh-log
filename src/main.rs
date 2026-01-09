@@ -1,3 +1,4 @@
+mod cache;
 mod data;
 mod input;
 mod view;
@@ -25,6 +26,7 @@ struct Cli {
 #[derive(Subcommand)]
 enum Commands {
     /// Open interactive TUI to view PRs
+    #[command(override_usage = "gh-log view [OPTIONS] --month <YYYY-MM>")]
     View {
         #[arg(
             long,
@@ -33,8 +35,11 @@ enum Commands {
             value_parser = parser_month
         )]
         month: String,
+        #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
+        force: bool,
     },
     /// Print PRs to terminal
+    #[command(override_usage = "gh-log print [OPTIONS] --month <YYYY-MM>")]
     Print {
         #[arg(
             long,
@@ -43,6 +48,8 @@ enum Commands {
             value_parser = parser_month
         )]
         month: String,
+        #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
+        force: bool,
     },
 }
 
@@ -93,6 +100,7 @@ struct GraphQLPullRequest {
     deletions: u32,
     #[serde(rename = "changedFiles")]
     changed_files: u32,
+    reviews: input::Reviews,
 }
 
 fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
@@ -125,6 +133,13 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
         additions
         deletions
         changedFiles
+        reviews(first: 10) {{
+          nodes {{
+            author {{
+              login
+            }}
+          }}
+        }}
       }}
     }}
   }}
@@ -157,6 +172,7 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
                 additions: pr.additions,
                 deletions: pr.deletions,
                 changed_files: pr.changed_files,
+                reviews: pr.reviews,
             });
         }
 
@@ -167,14 +183,96 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
     Ok(all_prs)
 }
 
-fn run_view_mode(month: &str) -> anyhow::Result<()> {
+fn fetch_reviewed_prs(month: &str) -> anyhow::Result<usize> {
+    let mut total_count = 0;
+    let mut has_next_page = true;
+    let mut cursor: Option<String> = None;
+
+    while has_next_page {
+        let after_clause = cursor
+            .as_ref()
+            .map(|c| format!(r#", after: "{}""#, c))
+            .unwrap_or_default();
+
+        let query = format!(
+            r#"{{
+  search(query: "is:pr reviewed-by:@me created:{}", type: ISSUE, first: 100{}) {{
+    pageInfo {{
+      hasNextPage
+      endCursor
+    }}
+    issueCount
+  }}
+}}"#,
+            month, after_clause
+        );
+
+        let output = Command::new("gh")
+            .arg("api")
+            .arg("graphql")
+            .arg("-f")
+            .arg(format!("query={}", query))
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("GraphQL query failed: {}", stderr);
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let response: serde_json::Value = serde_json::from_str(&json_str)?;
+
+        if let Some(issue_count) = response["data"]["search"]["issueCount"].as_u64() {
+            total_count = issue_count as usize;
+        }
+
+        has_next_page = response["data"]["search"]["pageInfo"]["hasNextPage"]
+            .as_bool()
+            .unwrap_or(false);
+        cursor = response["data"]["search"]["pageInfo"]["endCursor"]
+            .as_str()
+            .map(|s| s.to_string());
+    }
+
+    Ok(total_count)
+}
+
+fn get_data_with_cache(
+    month: &str,
+    use_cache: bool,
+) -> anyhow::Result<(Vec<input::PullRequest>, usize)> {
+    if use_cache {
+        if let Some(cached) = cache::load_from_cache(month)? {
+            eprintln!("Loading from cache...");
+            return Ok((cached.prs, cached.reviewed_count));
+        }
+    }
+
+    eprintln!("Fetching data from GitHub...");
+    let prs = fetch_prs(month)?;
+    let reviewed_count = fetch_reviewed_prs(month)?;
+
+    // Save to cache
+    let cached_data = cache::CachedData {
+        month: month.to_string(),
+        timestamp: chrono::Utc::now(),
+        prs: prs.clone(),
+        reviewed_count,
+    };
+    let _ = cache::save_to_cache(&cached_data);
+
+    Ok((prs, reviewed_count))
+}
+
+fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;
 
     let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
 
-    let prs = fetch_prs(month)?;
-    let data = data::process_prs(prs);
+    let use_cache = !force;
+    let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
+    let data = data::process_prs(prs, reviewed_count);
 
     let mut current_view = view::View::Summary;
     let mut scroll_state = view::ScrollState::default();
@@ -223,9 +321,10 @@ fn run_view_mode(month: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_print_mode(month: &str) -> anyhow::Result<()> {
-    let prs = fetch_prs(month)?;
-    let data = data::process_prs(prs);
+fn run_print_mode(month: &str, force: bool) -> anyhow::Result<()> {
+    let use_cache = !force;
+    let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
+    let data = data::process_prs(prs, reviewed_count);
 
     println!("GitHub PRs for {}", month);
     println!("  - Total PRs: {}", data.total_prs);
@@ -235,6 +334,25 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
     );
     println!("  - Frequency: {:.1} PRs/week", data.frequency);
     println!("  - Sizes: [{}]", data.format_size_distribution());
+    println!();
+
+    if !data.reviewers.is_empty() {
+        println!("Top Reviewers");
+        for reviewer in data.reviewers.iter().take(10) {
+            println!("  - {}: {} PRs", reviewer.login, reviewer.pr_count);
+        }
+        println!();
+    }
+
+    println!("My Review Activity");
+    println!("  - PRs Reviewed: {}", data.reviewed_count);
+    if data.total_prs > 0 {
+        let ratio = data.reviewed_count as f64 / data.total_prs as f64;
+        println!(
+            "  - Review Balance: {:.1}:1 ({} reviewed / {} created)",
+            ratio, data.reviewed_count, data.total_prs
+        );
+    }
     println!();
 
     for (week_idx, week) in data.weeks.iter().enumerate() {
@@ -295,7 +413,7 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::View { month } => run_view_mode(&month),
-        Commands::Print { month } => run_print_mode(&month),
+        Commands::View { month, force } => run_view_mode(&month, force),
+        Commands::Print { month, force } => run_print_mode(&month, force),
     }
 }
