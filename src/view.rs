@@ -10,10 +10,14 @@ use std::io::Result;
 
 use crate::data::{MonthData, PRDetail, RepoData, WeekData};
 
+/// Available view modes in the TUI.
 #[derive(Clone, Copy)]
 pub enum View {
+    /// Summary view showing weekly and repository statistics.
     Summary,
+    /// Detail view showing PRs grouped by week.
     Detail,
+    /// Tail view showing all PRs sorted by lead time.
     Tail,
 }
 
@@ -27,6 +31,7 @@ impl View {
     }
 }
 
+/// Manages scrolling state for TUI views.
 pub struct ScrollState {
     offset: usize,
     content_height: usize,
@@ -122,6 +127,7 @@ fn build_repos_data(repos: &[RepoData]) -> TableData {
         "Repository".to_string(),
         "PRs".to_string(),
         "Avg Lead Time".to_string(),
+        "Sizes".to_string(),
     ];
     let rows = repos
         .iter()
@@ -130,6 +136,7 @@ fn build_repos_data(repos: &[RepoData]) -> TableData {
                 r.name.clone(),
                 r.pr_count.to_string(),
                 format_duration(r.avg_lead_time),
+                r.format_size_distribution(),
             ]
         })
         .collect();
@@ -157,7 +164,7 @@ fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
                 pr.repo.clone(),
                 format!("{} {}", pr.number, pr.title),
                 format_duration(pr.lead_time),
-                format!("+{}-{} ~{}", pr.additions, pr.deletions, pr.changed_files),
+                pr.size().to_string(),
             ]
         })
         .collect();
@@ -195,6 +202,7 @@ fn table_data_to_widget(data: &TableData, scroll_offset: usize) -> Table<'static
         .column_spacing(1)
 }
 
+/// Renders the summary view showing weekly and repository statistics.
 pub fn render_summary(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
@@ -229,9 +237,10 @@ pub fn render_summary(
         );
 
         let stats = Layout::horizontal([
-            Constraint::Percentage(33),
-            Constraint::Percentage(33),
-            Constraint::Percentage(34),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
+            Constraint::Percentage(25),
         ])
         .split(header_chunks[1]);
 
@@ -246,6 +255,10 @@ pub fn render_summary(
         frame.render_widget(
             Paragraph::new(format!("Frequency: {}", format_frequency(data.frequency))),
             stats[2],
+        );
+        frame.render_widget(
+            Paragraph::new(format!("Sizes: {}", data.format_size_distribution())),
+            stats[3],
         );
 
         // Tables
@@ -283,6 +296,7 @@ pub fn render_summary(
     Ok(())
 }
 
+/// Renders the detail view showing PRs grouped by week.
 pub fn render_detail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
@@ -378,6 +392,7 @@ pub fn render_detail(
     Ok(())
 }
 
+/// Renders the tail view showing all PRs sorted by lead time (longest first).
 pub fn render_tail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,

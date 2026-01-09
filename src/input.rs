@@ -1,12 +1,16 @@
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
+/// GitHub repository information.
 #[derive(Debug, Deserialize, Clone)]
 pub struct Repository {
     #[serde(rename = "nameWithOwner")]
     pub name_with_owner: String,
 }
 
+/// Pull request data fetched from GitHub GraphQL API.
+///
+/// Includes timing information, size metrics, and repository details.
 #[derive(Debug, Deserialize, Clone)]
 pub struct PullRequest {
     pub number: u32,

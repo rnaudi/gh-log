@@ -234,6 +234,7 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
         format_duration(data.avg_lead_time)
     );
     println!("  - Frequency: {:.1} PRs/week", data.frequency);
+    println!("  - Sizes: [{}]", data.format_size_distribution());
     println!();
 
     for (week_idx, week) in data.weeks.iter().enumerate() {
@@ -249,15 +250,13 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
         let prs = &data.prs_by_week[week_idx];
         for pr in prs {
             println!(
-                "    - {} | {} | #{} {} | {} | +{}-{} ~{}",
+                "    - {} | {} | #{} {} | {} | {}",
                 format_date(pr.created_at),
                 pr.repo,
                 pr.number,
                 pr.title,
                 format_duration(pr.lead_time),
-                pr.additions,
-                pr.deletions,
-                pr.changed_files
+                pr.size()
             );
         }
         println!();
@@ -266,10 +265,11 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
     println!("Repositories");
     for repo in &data.repos {
         println!(
-            "  - {} - {} PRs (Avg: {})",
+            "  - {} - {} PRs (Avg: {}) [{}]",
             repo.name,
             repo.pr_count,
-            format_duration(repo.avg_lead_time)
+            format_duration(repo.avg_lead_time),
+            repo.format_size_distribution()
         );
     }
 
