@@ -10,6 +10,7 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
+use serde::Deserialize;
 use std::io::stdout;
 use std::process::Command;
 
@@ -54,21 +55,116 @@ fn parser_month(s: &str) -> anyhow::Result<String> {
     }
 }
 
-fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
-    let output = Command::new("gh")
-        .arg("search")
-        .arg("prs")
-        .arg("--author=@me")
-        .arg(format!("--created={}", month))
-        .arg("--limit")
-        .arg("200")
-        .arg("--json")
-        .arg("createdAt,number,repository,title,updatedAt,url")
-        .output()?;
+#[derive(Debug, Deserialize)]
+struct GraphQLResponse {
+    data: GraphQLData,
+}
 
-    let json_str = String::from_utf8_lossy(&output.stdout);
-    let prs: Vec<input::PullRequest> = serde_json::from_str(&json_str)?;
-    Ok(prs)
+#[derive(Debug, Deserialize)]
+struct GraphQLData {
+    search: SearchResults,
+}
+
+#[derive(Debug, Deserialize)]
+struct SearchResults {
+    nodes: Vec<GraphQLPullRequest>,
+    #[serde(rename = "pageInfo")]
+    page_info: PageInfo,
+}
+
+#[derive(Debug, Deserialize)]
+struct PageInfo {
+    #[serde(rename = "hasNextPage")]
+    has_next_page: bool,
+    #[serde(rename = "endCursor")]
+    end_cursor: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+struct GraphQLPullRequest {
+    number: u32,
+    title: String,
+    repository: input::Repository,
+    #[serde(rename = "createdAt")]
+    created_at: chrono::DateTime<chrono::Utc>,
+    #[serde(rename = "updatedAt")]
+    updated_at: chrono::DateTime<chrono::Utc>,
+    additions: u32,
+    deletions: u32,
+    #[serde(rename = "changedFiles")]
+    changed_files: u32,
+}
+
+fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
+    let mut all_prs = Vec::new();
+    let mut has_next_page = true;
+    let mut cursor: Option<String> = None;
+
+    while has_next_page {
+        let after_clause = cursor
+            .as_ref()
+            .map(|c| format!(r#", after: "{}""#, c))
+            .unwrap_or_default();
+
+        let query = format!(
+            r#"{{
+  search(query: "is:pr author:@me created:{}", type: ISSUE, first: 100{}) {{
+    pageInfo {{
+      hasNextPage
+      endCursor
+    }}
+    nodes {{
+      ... on PullRequest {{
+        number
+        title
+        repository {{
+          nameWithOwner
+        }}
+        createdAt
+        updatedAt
+        additions
+        deletions
+        changedFiles
+      }}
+    }}
+  }}
+}}"#,
+            month, after_clause
+        );
+
+        let output = Command::new("gh")
+            .arg("api")
+            .arg("graphql")
+            .arg("-f")
+            .arg(format!("query={}", query))
+            .output()?;
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("GraphQL query failed: {}", stderr);
+        }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let response: GraphQLResponse = serde_json::from_str(&json_str)?;
+
+        for pr in response.data.search.nodes {
+            all_prs.push(input::PullRequest {
+                number: pr.number,
+                title: pr.title,
+                repository: pr.repository,
+                created_at: pr.created_at,
+                updated_at: pr.updated_at,
+                additions: pr.additions,
+                deletions: pr.deletions,
+                changed_files: pr.changed_files,
+            });
+        }
+
+        has_next_page = response.data.search.page_info.has_next_page;
+        cursor = response.data.search.page_info.end_cursor;
+    }
+
+    Ok(all_prs)
 }
 
 fn run_view_mode(month: &str) -> anyhow::Result<()> {
@@ -153,12 +249,15 @@ fn run_print_mode(month: &str) -> anyhow::Result<()> {
         let prs = &data.prs_by_week[week_idx];
         for pr in prs {
             println!(
-                "    - {} | {} | #{} {} | {}",
+                "    - {} | {} | #{} {} | {} | +{}-{} ~{}",
                 format_date(pr.created_at),
                 pr.repo,
                 pr.number,
                 pr.title,
-                format_duration(pr.lead_time)
+                format_duration(pr.lead_time),
+                pr.additions,
+                pr.deletions,
+                pr.changed_files
             );
         }
         println!();
