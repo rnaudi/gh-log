@@ -43,6 +43,19 @@ Print PR summary directly to terminal:
 gh-log print --month 2025-01
 ```
 
+**Output formats:**
+- Default (raw): Human-readable summary format
+- JSON: Machine-readable JSON format
+- CSV: CSV format for spreadsheet analysis
+
+```bash
+gh-log print --month 2025-01
+
+gh-log print --month 2025-01 --json
+
+gh-log print --month 2025-01 --csv
+```
+
 ### Caching
 
 Data is automatically cached for faster subsequent requests.
@@ -250,8 +263,8 @@ Understand work patterns:
 #### 12. Export to CSV/JSON
 Enable further analysis:
 ```bash
-gh-log export --month 2026-01 --format csv > prs.csv
-gh-log export --month 2026-01 --format json > prs.json
+gh-log print --month 2026-01 --csv > prs.csv
+gh-log print --month 2026-01 --json > prs.json
 ```
 
 #### 13. Filter by Repository

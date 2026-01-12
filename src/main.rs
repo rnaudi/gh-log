@@ -23,6 +23,13 @@ struct Cli {
     command: Commands,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum OutputFormat {
+    Raw,
+    Json,
+    Csv,
+}
+
 #[derive(Subcommand)]
 enum Commands {
     /// Open interactive TUI to view PRs
@@ -50,6 +57,10 @@ enum Commands {
         month: String,
         #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
         force: bool,
+        #[arg(long, help = "Output data in JSON format")]
+        json: bool,
+        #[arg(long, help = "Output data in CSV format")]
+        csv: bool,
     },
 }
 
@@ -319,11 +330,176 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn run_print_mode(month: &str, force: bool) -> anyhow::Result<()> {
+fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     let data = data::process_prs(prs, reviewed_count);
 
+    match format {
+        OutputFormat::Raw => print_data(&data, month),
+        OutputFormat::Json => print_json(&data)?,
+        OutputFormat::Csv => print_csv(&data)?,
+    }
+
+    Ok(())
+}
+
+fn print_json(data: &data::MonthData) -> anyhow::Result<()> {
+    use serde::Serialize;
+
+    #[derive(Serialize)]
+    struct JsonOutput<'a> {
+        month_start: String,
+        total_prs: usize,
+        avg_lead_time_hours: f64,
+        frequency: f64,
+        size_distribution: SizeDistribution,
+        reviewers: Vec<JsonReviewer<'a>>,
+        reviewed_count: usize,
+        weeks: Vec<JsonWeek<'a>>,
+        repositories: Vec<JsonRepo<'a>>,
+    }
+
+    #[derive(Serialize)]
+    struct SizeDistribution {
+        s: usize,
+        m: usize,
+        l: usize,
+        xl: usize,
+    }
+
+    #[derive(Serialize)]
+    struct JsonReviewer<'a> {
+        login: &'a str,
+        pr_count: usize,
+    }
+
+    #[derive(Serialize)]
+    struct JsonWeek<'a> {
+        week_num: usize,
+        week_start: String,
+        week_end: String,
+        pr_count: usize,
+        avg_lead_time_hours: f64,
+        prs: Vec<JsonPR<'a>>,
+    }
+
+    #[derive(Serialize)]
+    struct JsonPR<'a> {
+        created_at: String,
+        repo: &'a str,
+        number: u32,
+        title: &'a str,
+        lead_time_hours: f64,
+        size: String,
+        additions: u32,
+        deletions: u32,
+        changed_files: u32,
+    }
+
+    #[derive(Serialize)]
+    struct JsonRepo<'a> {
+        name: &'a str,
+        pr_count: usize,
+        avg_lead_time_hours: f64,
+        size_distribution: SizeDistribution,
+    }
+
+    let output = JsonOutput {
+        month_start: format_date(data.month_start),
+        total_prs: data.total_prs,
+        avg_lead_time_hours: data.avg_lead_time.num_seconds() as f64 / 3600.0,
+        frequency: data.frequency,
+        size_distribution: SizeDistribution {
+            s: data.size_s,
+            m: data.size_m,
+            l: data.size_l,
+            xl: data.size_xl,
+        },
+        reviewers: data
+            .reviewers
+            .iter()
+            .map(|r| JsonReviewer {
+                login: &r.login,
+                pr_count: r.pr_count,
+            })
+            .collect(),
+        reviewed_count: data.reviewed_count,
+        weeks: data
+            .weeks
+            .iter()
+            .enumerate()
+            .map(|(idx, week)| JsonWeek {
+                week_num: week.week_num,
+                week_start: format_date(week.week_start),
+                week_end: format_date(week.week_end),
+                pr_count: week.pr_count,
+                avg_lead_time_hours: week.avg_lead_time.num_seconds() as f64 / 3600.0,
+                prs: data.prs_by_week[idx]
+                    .iter()
+                    .map(|pr| JsonPR {
+                        created_at: format_date(pr.created_at),
+                        repo: &pr.repo,
+                        number: pr.number,
+                        title: &pr.title,
+                        lead_time_hours: pr.lead_time.num_seconds() as f64 / 3600.0,
+                        size: pr.size().to_string(),
+                        additions: pr.additions,
+                        deletions: pr.deletions,
+                        changed_files: pr.changed_files,
+                    })
+                    .collect(),
+            })
+            .collect(),
+        repositories: data
+            .repos
+            .iter()
+            .map(|repo| JsonRepo {
+                name: &repo.name,
+                pr_count: repo.pr_count,
+                avg_lead_time_hours: repo.avg_lead_time.num_seconds() as f64 / 3600.0,
+                size_distribution: SizeDistribution {
+                    s: repo.size_s,
+                    m: repo.size_m,
+                    l: repo.size_l,
+                    xl: repo.size_xl,
+                },
+            })
+            .collect(),
+    };
+
+    let json = serde_json::to_string_pretty(&output)?;
+    println!("{}", json);
+    Ok(())
+}
+
+fn print_csv(data: &data::MonthData) -> anyhow::Result<()> {
+    // Print header
+    println!("created_at,repo,number,title,lead_time_hours,size,additions,deletions,changed_files");
+
+    // Print each PR
+    for week_prs in &data.prs_by_week {
+        for pr in week_prs {
+            let lead_time_hours = pr.lead_time.num_seconds() as f64 / 3600.0;
+            println!(
+                "{},{},{},\"{}\",{:.2},{},{},{},{}",
+                format_date(pr.created_at),
+                pr.repo,
+                pr.number,
+                pr.title.replace("\"", "\"\""), // Escape quotes in CSV
+                lead_time_hours,
+                pr.size(),
+                pr.additions,
+                pr.deletions,
+                pr.changed_files
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn print_data(data: &data::MonthData, month: &str) {
     println!("GitHub PRs for {}", month);
     println!("  - Total PRs: {}", data.total_prs);
     println!(
@@ -388,8 +564,6 @@ fn run_print_mode(month: &str, force: bool) -> anyhow::Result<()> {
             repo.format_size_distribution()
         );
     }
-
-    Ok(())
 }
 
 fn format_duration(d: chrono::Duration) -> String {
@@ -412,6 +586,124 @@ fn main() -> anyhow::Result<()> {
 
     match cli.command {
         Commands::View { month, force } => run_view_mode(&month, force),
-        Commands::Print { month, force } => run_print_mode(&month, force),
+        Commands::Print {
+            month,
+            force,
+            json,
+            csv,
+        } => {
+            let format = if json {
+                OutputFormat::Json
+            } else if csv {
+                OutputFormat::Csv
+            } else {
+                OutputFormat::Raw
+            };
+            run_print_mode(&month, force, format)
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Utc;
+
+    fn create_test_month_data() -> data::MonthData {
+        use chrono::TimeZone;
+
+        let month_start = Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        let week_start = Utc.with_ymd_and_hms(2026, 1, 5, 0, 0, 0).unwrap();
+        let week_end = Utc.with_ymd_and_hms(2026, 1, 11, 23, 59, 59).unwrap();
+
+        data::MonthData {
+            month_start,
+            total_prs: 2,
+            avg_lead_time: chrono::Duration::hours(2),
+            frequency: 2.0,
+            size_s: 1,
+            size_m: 1,
+            size_l: 0,
+            size_xl: 0,
+            weeks: vec![data::WeekData {
+                week_num: 1,
+                week_start,
+                week_end,
+                pr_count: 2,
+                avg_lead_time: chrono::Duration::hours(2),
+            }],
+            repos: vec![data::RepoData {
+                name: "test/repo".to_string(),
+                pr_count: 2,
+                avg_lead_time: chrono::Duration::hours(2),
+                size_s: 1,
+                size_m: 1,
+                size_l: 0,
+                size_xl: 0,
+            }],
+            prs_by_week: vec![vec![
+                data::PRDetail {
+                    created_at: Utc.with_ymd_and_hms(2026, 1, 6, 10, 0, 0).unwrap(),
+                    repo: "test/repo".to_string(),
+                    number: 1,
+                    title: "Test PR 1".to_string(),
+                    lead_time: chrono::Duration::hours(1),
+                    additions: 10,
+                    deletions: 5,
+                    changed_files: 2,
+                },
+                data::PRDetail {
+                    created_at: Utc.with_ymd_and_hms(2026, 1, 7, 14, 0, 0).unwrap(),
+                    repo: "test/repo".to_string(),
+                    number: 2,
+                    title: "Test PR 2".to_string(),
+                    lead_time: chrono::Duration::hours(3),
+                    additions: 100,
+                    deletions: 50,
+                    changed_files: 5,
+                },
+            ]],
+            reviewers: vec![data::ReviewerData {
+                login: "alice".to_string(),
+                pr_count: 2,
+            }],
+            reviewed_count: 5,
+        }
+    }
+
+    #[test]
+    fn test_print_json_output() {
+        let data = create_test_month_data();
+        let result = print_json(&data);
+        assert!(result.is_ok(), "JSON output should succeed");
+    }
+
+    #[test]
+    fn test_print_csv_output() {
+        let data = create_test_month_data();
+        let result = print_csv(&data);
+        assert!(result.is_ok(), "CSV output should succeed");
+    }
+
+    #[test]
+    fn test_format_duration() {
+        assert_eq!(format_duration(chrono::Duration::minutes(30)), "30m");
+        assert_eq!(format_duration(chrono::Duration::hours(2)), "2h 0m");
+        assert_eq!(
+            format_duration(chrono::Duration::hours(2) + chrono::Duration::minutes(30)),
+            "2h 30m"
+        );
+        assert_eq!(format_duration(chrono::Duration::days(1)), "1d 0h");
+        assert_eq!(
+            format_duration(chrono::Duration::days(1) + chrono::Duration::hours(3)),
+            "1d 3h"
+        );
+    }
+
+    #[test]
+    fn test_format_date() {
+        use chrono::TimeZone;
+        let date = Utc.with_ymd_and_hms(2026, 1, 15, 10, 30, 0).unwrap();
+        assert_eq!(format_date(date), "2026-01-15");
     }
 }
