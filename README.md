@@ -2,6 +2,55 @@
 
 GitHub PR analytics for your terminal.
 
+~~~
+┌─ GitHub PRs for 2025-01 ──────────────────────────────────────────┐
+│ Total PRs: 34 │ Avg Lead Time: 35m │ Frequency: 8.5/week          │
+│ Sizes: [26S 3M 4L 1XL] │ Review Balance: 1.3:1 (45 reviewed)      │
+└────────────────────────────────────────────────────────────────────┘
+
+━━━ Week 1 (Jan 05 - Jan 11) │ 8 PRs │ Avg: 25m ━━━━━━━━━━━━━━━━━━━
+
+  Jan 06 │ acme/api-gateway   │ #1234 Add OAuth support          │ 15m │ S
+  Jan 07 │ acme/user-service  │ #5678 Fix rate limiting bug      │ 45m │ M
+  Jan 08 │ acme/auth          │ #9012 Refactor user service      │ 12m │ S
+  Jan 09 │ acme/api-gateway   │ #1235 Update dependencies        │  8m │ S
+  Jan 10 │ acme/api-gateway   │ #1236 Add metrics endpoint       │ 18m │ S
+  Jan 11 │ acme/user-service  │ #5679 Improve error handling     │ 32m │ S
+  Jan 11 │ acme/auth          │ #9013 Add 2FA support            │ 1h  │ L
+  Jan 11 │ acme/api-gateway   │ #1237 Fix memory leak            │ 22m │ S
+
+━━━ Week 2 (Jan 12 - Jan 18) │ 12 PRs │ Avg: 38m ━━━━━━━━━━━━━━━━━━
+
+  Jan 13 │ acme/api-gateway   │ #1238 Optimize database queries  │ 28m │ S
+  Jan 13 │ acme/auth          │ #9014 Add session management     │ 55m │ M
+  Jan 14 │ acme/user-service  │ #5680 Add user profile API       │ 1h  │ L
+  Jan 15 │ acme/api-gateway   │ #1239 Update API docs            │ 10m │ S
+  Jan 16 │ acme/api-gateway   │ #1240 Add rate limit headers     │ 15m │ S
+  Jan 17 │ acme/user-service  │ #5681 Fix validation bug         │ 42m │ S
+  Jan 17 │ acme/auth          │ #9015 Refactor auth middleware   │ 35m │ S
+  Jan 18 │ acme/api-gateway   │ #1241 Add health check endpoint  │ 12m │ S
+  Jan 18 │ acme/api-gateway   │ #1242 Update logging             │  8m │ S
+  Jan 18 │ acme/user-service  │ #5682 Add pagination support     │ 48m │ M
+  Jan 18 │ acme/auth          │ #9016 Fix token refresh          │ 25m │ S
+  Jan 18 │ acme/api-gateway   │ #1243 Improve error messages     │ 18m │ S
+
+━━━ Week 3 (Jan 19 - Jan 25) │ 9 PRs │ Avg: 42m ━━━━━━━━━━━━━━━━━━━
+
+  Jan 20 │ acme/user-service  │ #5683 Add search functionality   │ 1h  │ L
+  Jan 21 │ acme/api-gateway   │ #1244 Fix CORS configuration     │ 38m │ S
+  Jan 22 │ acme/auth          │ #9017 Add password reset         │ 52m │ M
+  Jan 23 │ acme/api-gateway   │ #1245 Refactor request handlers  │ 35m │ S
+  Jan 24 │ acme/user-service  │ #5684 Fix user deletion bug      │ 28m │ S
+  Jan 25 │ acme/api-gateway   │ #1246 Add request validation     │ 45m │ S
+  Jan 25 │ acme/auth          │ #9018 Update security headers    │ 18m │ S
+  Jan 25 │ acme/api-gateway   │ #1247 Improve cache strategy     │ 1h  │ L
+  Jan 25 │ acme/user-service  │ #5685 Add email verification     │ 38m │ S
+
+┌─ Controls ────────────────────────────────────────────────────────┐
+│ s: Summary │ d: Details │ t: Tail │ ↑↓/jk: Scroll │ q: Quit       │
+└────────────────────────────────────────────────────────────────────┘
+~~~
+
 ## Installation
 
 ### Homebrew
@@ -41,6 +90,30 @@ gh-log print --month 2025-01
 gh-log print --month 2025-01 --json
 gh-log print --month 2025-01 --csv
 ```
+
+~~~
+created_at,repo,number,title,lead_time_hours,size,additions,deletions,changed_files
+2025-01-06T10:30:00Z,acme/api-gateway,1234,Add OAuth support,0.25,S,145,23,8
+2025-01-07T14:15:00Z,acme/user-service,5678,Fix rate limiting bug,0.75,M,87,45,3
+2025-01-08T09:20:00Z,acme/auth,9012,Refactor user service,0.20,S,42,18,5
+2025-01-09T11:45:00Z,acme/api-gateway,1235,Update dependencies,0.13,S,312,287,12
+2025-01-10T15:30:00Z,acme/api-gateway,1236,Add metrics endpoint,0.30,S,68,12,4
+2025-01-11T08:00:00Z,acme/user-service,5679,Improve error handling,0.53,S,95,34,6
+2025-01-11T16:45:00Z,acme/auth,9013,Add 2FA support,1.00,L,234,67,15
+2025-01-11T18:30:00Z,acme/api-gateway,1237,Fix memory leak,0.37,S,45,28,2
+2025-01-13T10:00:00Z,acme/api-gateway,1238,Optimize database queries,0.47,S,78,56,4
+2025-01-13T14:30:00Z,acme/auth,9014,Add session management,0.92,M,156,89,9
+2025-01-14T09:15:00Z,acme/user-service,5680,Add user profile API,1.00,L,289,123,18
+2025-01-15T11:00:00Z,acme/api-gateway,1239,Update API docs,0.17,S,234,156,1
+2025-01-16T13:20:00Z,acme/api-gateway,1240,Add rate limit headers,0.25,S,34,12,2
+2025-01-17T10:45:00Z,acme/user-service,5681,Fix validation bug,0.70,S,67,45,3
+2025-01-17T15:00:00Z,acme/auth,9015,Refactor auth middleware,0.58,S,98,76,7
+2025-01-18T09:30:00Z,acme/api-gateway,1241,Add health check endpoint,0.20,S,28,8,2
+2025-01-18T11:15:00Z,acme/api-gateway,1242,Update logging,0.13,S,45,23,3
+2025-01-18T14:00:00Z,acme/user-service,5682,Add pagination support,0.80,M,145,89,11
+2025-01-18T16:45:00Z,acme/auth,9016,Fix token refresh,0.42,S,56,34,4
+2025-01-18T18:20:00Z,acme/api-gateway,1243,Improve error messages,0.30,S,67,45,5
+~~~
 
 ### Caching
 
