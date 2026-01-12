@@ -2,6 +2,8 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Utc, Weekday};
 use std::collections::BTreeMap;
 use std::fmt;
 
+use crate::config::{Config, SizeConfig};
+
 /// Pull request size categorization.
 ///
 /// Computed based on lines changed and files modified.
@@ -28,48 +30,37 @@ impl fmt::Display for PRSize {
     }
 }
 
-/// Computes PR size based on additions, deletions, and number of files changed.
+/// Computes PR size based on lines changed and file count
 ///
-/// # Size Categories
-///
-/// - `S` (Small): <= 50 lines changed
-/// - `M` (Medium): 51-200 lines changed
-/// - `L` (Large): 201-500 lines changed
-/// - `XL` (Extra Large): > 500 lines changed
-///
-/// # File Count Overrides
-///
-/// - >= 25 files: always `XL`
-/// - >= 15 files: at least `L` (bumps to `XL` if > 500 lines)
-///
-/// # Examples
-///
-/// ```
-/// use gh_log::data::{compute_pr_size, PRSize};
-///
-/// assert_eq!(compute_pr_size(25, 25, 3), PRSize::S);
-/// assert_eq!(compute_pr_size(100, 50, 5), PRSize::M);
-/// assert_eq!(compute_pr_size(300, 100, 8), PRSize::L);
-/// assert_eq!(compute_pr_size(1000, 500, 10), PRSize::XL);
-/// ```
-pub fn compute_pr_size(additions: u32, deletions: u32, changed_files: u32) -> PRSize {
+/// Size: S (small), M (medium), L (large), XL (extra large)
+/// Thresholds: configurable via size_config (defaults: 50/200/500)
+/// Overrides: >=25 files = XL, >=15 files = at least L
+pub fn compute_pr_size(
+    additions: u32,
+    deletions: u32,
+    changed_files: u32,
+    size_config: &SizeConfig,
+) -> PRSize {
     let total_lines = additions + deletions;
     if changed_files >= 25 {
         return PRSize::XL;
     }
 
     if changed_files >= 15 {
-        if total_lines > 500 {
+        if total_lines > size_config.large {
             return PRSize::XL;
         }
         return PRSize::L;
     }
 
-    match total_lines {
-        0..=50 => PRSize::S,
-        51..=200 => PRSize::M,
-        201..=500 => PRSize::L,
-        _ => PRSize::XL,
+    if total_lines <= size_config.small {
+        PRSize::S
+    } else if total_lines <= size_config.medium {
+        PRSize::M
+    } else if total_lines <= size_config.large {
+        PRSize::L
+    } else {
+        PRSize::XL
     }
 }
 
@@ -127,8 +118,13 @@ pub struct PRDetail {
 
 impl PRDetail {
     /// Returns the computed size category for this PR.
-    pub fn size(&self) -> PRSize {
-        compute_pr_size(self.additions, self.deletions, self.changed_files)
+    pub fn size(&self, size_config: &SizeConfig) -> PRSize {
+        compute_pr_size(
+            self.additions,
+            self.deletions,
+            self.changed_files,
+            size_config,
+        )
     }
 }
 
@@ -209,10 +205,15 @@ struct Repository {
     name_with_owner: String,
 }
 
-/// Processes a list of pull requests and computes aggregated metrics.
+/// Processes PRs and computes aggregated metrics
 ///
-/// Groups PRs by week and repository, calculates lead times, and computes frequency.
-pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -> MonthData {
+/// Groups by week/repo, calculates lead times and frequency.
+/// Applies config filters: exclude_* (hidden), ignore_* (shown, not in metrics).
+pub fn process_prs(
+    prs: Vec<crate::input::PullRequest>,
+    reviewed_count: usize,
+    config: &Config,
+) -> MonthData {
     if prs.is_empty() {
         return MonthData::default();
     }
@@ -244,8 +245,51 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -
 
     pr_data.sort_by_key(|pr| pr.created_at);
 
-    let first_pr_date = pr_data.first().unwrap().created_at;
-    let last_pr_date = pr_data.last().unwrap().created_at;
+    // Filter out excluded PRs completely (they won't be shown at all)
+    pr_data.retain(|pr| {
+        !config.should_exclude_repo(&pr.repository.name_with_owner)
+            && !config.should_exclude_pr_title(&pr.title)
+    });
+
+    // Separate PRs into those counted in metrics vs all (for display)
+    // Ignored PRs are shown but not counted in metrics
+    let pr_data_for_metrics: Vec<&PRData> = pr_data
+        .iter()
+        .filter(|pr| {
+            !config.should_ignore_repo(&pr.repository.name_with_owner)
+                && !config.should_ignore_pr_title(&pr.title)
+        })
+        .collect();
+
+    // If all PRs are excluded, still show them but with zero metrics
+    if pr_data_for_metrics.is_empty() {
+        // Use all PRs for display purposes
+        let first_pr_date = pr_data.first().unwrap().created_at;
+        let month_start = {
+            let dt = first_pr_date;
+            Utc.with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0)
+                .unwrap()
+        };
+
+        return MonthData {
+            month_start,
+            total_prs: 0, // No PRs counted in metrics
+            avg_lead_time: Duration::zero(),
+            frequency: 0.0,
+            size_s: 0,
+            size_m: 0,
+            size_l: 0,
+            size_xl: 0,
+            weeks: Vec::new(),
+            repos: Vec::new(),
+            prs_by_week: Vec::new(),
+            reviewers: Vec::new(),
+            reviewed_count: 0,
+        };
+    }
+
+    let first_pr_date = pr_data_for_metrics.first().unwrap().created_at;
+    let last_pr_date = pr_data_for_metrics.last().unwrap().created_at;
 
     let month_start = {
         let dt = first_pr_date;
@@ -304,19 +348,19 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -
     }
 
     let avg_lead_time = avg_duration(
-        &pr_data
+        &pr_data_for_metrics
             .iter()
             .map(|pr| pr.lead_time)
             .collect::<Vec<Duration>>(),
     );
 
-    // Calculate frequency based on actual time span
+    // Calculate frequency based on actual time span (only counting included PRs)
     let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
     let time_span_weeks = time_span_days / 7.0;
     let frequency = if time_span_weeks > 0.0 {
-        pr_data.len() as f64 / time_span_weeks
+        pr_data_for_metrics.len() as f64 / time_span_weeks
     } else {
-        pr_data.len() as f64
+        pr_data_for_metrics.len() as f64
     };
 
     let week_data: Vec<WeekData> = weeks
@@ -362,7 +406,7 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -
             let mut size_xl = 0;
 
             for pr in repo_prs {
-                match compute_pr_size(pr.additions, pr.deletions, pr.changed_files) {
+                match compute_pr_size(pr.additions, pr.deletions, pr.changed_files, &config.size) {
                     PRSize::S => size_s += 1,
                     PRSize::M => size_m += 1,
                     PRSize::L => size_l += 1,
@@ -388,8 +432,9 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -
     let mut size_l = 0;
     let mut size_xl = 0;
 
-    for pr in &pr_data {
-        match compute_pr_size(pr.additions, pr.deletions, pr.changed_files) {
+    // Only count sizes for non-excluded PRs
+    for pr in &pr_data_for_metrics {
+        match compute_pr_size(pr.additions, pr.deletions, pr.changed_files, &config.size) {
             PRSize::S => size_s += 1,
             PRSize::M => size_m += 1,
             PRSize::L => size_l += 1,
@@ -415,7 +460,7 @@ pub fn process_prs(prs: Vec<crate::input::PullRequest>, reviewed_count: usize) -
 
     MonthData {
         month_start,
-        total_prs: pr_data.len(),
+        total_prs: pr_data_for_metrics.len(), // Only count non-excluded PRs
         avg_lead_time,
         frequency,
         size_s,
@@ -436,49 +481,58 @@ mod tests {
 
     #[test]
     fn test_compute_pr_size() {
+        use crate::config::SizeConfig;
+        let config = SizeConfig::default();
+
         // Small: <= 50 lines
-        assert_eq!(compute_pr_size(10, 5, 1), PRSize::S);
-        assert_eq!(compute_pr_size(25, 25, 3), PRSize::S);
-        assert_eq!(compute_pr_size(50, 0, 5), PRSize::S);
-        assert_eq!(compute_pr_size(0, 50, 2), PRSize::S);
+        assert_eq!(compute_pr_size(10, 5, 1, &config), PRSize::S);
+        assert_eq!(compute_pr_size(25, 25, 3, &config), PRSize::S);
+        assert_eq!(compute_pr_size(50, 0, 5, &config), PRSize::S);
+        assert_eq!(compute_pr_size(0, 50, 2, &config), PRSize::S);
 
         // Medium: 51-200 lines
-        assert_eq!(compute_pr_size(51, 0, 1), PRSize::M);
-        assert_eq!(compute_pr_size(100, 50, 5), PRSize::M);
-        assert_eq!(compute_pr_size(150, 50, 8), PRSize::M);
-        assert_eq!(compute_pr_size(200, 0, 10), PRSize::M);
+        assert_eq!(compute_pr_size(51, 0, 1, &config), PRSize::M);
+        assert_eq!(compute_pr_size(100, 50, 5, &config), PRSize::M);
+        assert_eq!(compute_pr_size(150, 50, 8, &config), PRSize::M);
+        assert_eq!(compute_pr_size(200, 0, 10, &config), PRSize::M);
 
         // Large: 201-500 lines
-        assert_eq!(compute_pr_size(201, 0, 1), PRSize::L);
-        assert_eq!(compute_pr_size(300, 100, 8), PRSize::L);
-        assert_eq!(compute_pr_size(250, 250, 12), PRSize::L);
-        assert_eq!(compute_pr_size(500, 0, 14), PRSize::L);
+        assert_eq!(compute_pr_size(201, 0, 1, &config), PRSize::L);
+        assert_eq!(compute_pr_size(300, 100, 8, &config), PRSize::L);
+        assert_eq!(compute_pr_size(250, 250, 12, &config), PRSize::L);
+        assert_eq!(compute_pr_size(500, 0, 14, &config), PRSize::L);
 
         // XL: > 500 lines
-        assert_eq!(compute_pr_size(501, 0, 1), PRSize::XL);
-        assert_eq!(compute_pr_size(1000, 500, 10), PRSize::XL);
-        assert_eq!(compute_pr_size(5000, 2000, 20), PRSize::XL);
+        assert_eq!(compute_pr_size(501, 0, 1, &config), PRSize::XL);
+        assert_eq!(compute_pr_size(1000, 500, 10, &config), PRSize::XL);
+        assert_eq!(compute_pr_size(5000, 2000, 20, &config), PRSize::XL);
 
         // File count overrides: >= 15 files bumps to at least L
-        assert_eq!(compute_pr_size(10, 5, 15), PRSize::L);
-        assert_eq!(compute_pr_size(50, 50, 20), PRSize::L);
+        assert_eq!(compute_pr_size(10, 5, 15, &config), PRSize::L);
+        assert_eq!(compute_pr_size(50, 50, 20, &config), PRSize::L);
 
         // File count overrides: >= 15 files with > 500 lines is XL
-        assert_eq!(compute_pr_size(300, 300, 15), PRSize::XL);
+        assert_eq!(compute_pr_size(300, 300, 15, &config), PRSize::XL);
 
         // File count overrides: >= 25 files is always XL
-        assert_eq!(compute_pr_size(10, 5, 25), PRSize::XL);
-        assert_eq!(compute_pr_size(1, 1, 30), PRSize::XL);
-        assert_eq!(compute_pr_size(100, 50, 50), PRSize::XL);
+        assert_eq!(compute_pr_size(10, 5, 25, &config), PRSize::XL);
+        assert_eq!(compute_pr_size(1, 1, 30, &config), PRSize::XL);
+        assert_eq!(compute_pr_size(100, 50, 50, &config), PRSize::XL);
 
-        // TODO: Add property-based test to verify:
-        // - Size is monotonic with respect to total lines
-        // - File count overrides work correctly across all ranges
-        // - All inputs produce valid PRSize variants
+        // Test with custom thresholds
+        let custom_config = SizeConfig::new(100, 500, 1000);
+        assert_eq!(compute_pr_size(100, 0, 1, &custom_config), PRSize::S);
+        assert_eq!(compute_pr_size(101, 0, 1, &custom_config), PRSize::M);
+        assert_eq!(compute_pr_size(500, 0, 1, &custom_config), PRSize::M);
+        assert_eq!(compute_pr_size(501, 0, 1, &custom_config), PRSize::L);
+        assert_eq!(compute_pr_size(1000, 0, 1, &custom_config), PRSize::L);
+        assert_eq!(compute_pr_size(1001, 0, 1, &custom_config), PRSize::XL);
     }
 
     #[test]
     fn test_pr_detail_size_method() {
+        use crate::config::SizeConfig;
+        let config = SizeConfig::default();
         let pr = PRDetail {
             created_at: Utc::now(),
             repo: "test/repo".to_string(),
@@ -489,7 +543,7 @@ mod tests {
             deletions: 50,
             changed_files: 5,
         };
-        assert_eq!(pr.size(), PRSize::M);
+        assert_eq!(pr.size(&config), PRSize::M);
     }
 
     #[test]

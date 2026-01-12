@@ -8,6 +8,7 @@ use ratatui::{
 };
 use std::io::Result;
 
+use crate::config::Config;
 use crate::data::{MonthData, PRDetail, RepoData, WeekData};
 
 /// Available view modes in the TUI.
@@ -163,7 +164,7 @@ fn build_reviewers_data(reviewers: &[crate::data::ReviewerData]) -> TableData {
     }
 }
 
-fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
+fn build_pr_details_data(title: String, prs: &[PRDetail], config: &Config) -> TableData {
     let headers = vec![
         "Date".to_string(),
         "Repository".to_string(),
@@ -179,7 +180,7 @@ fn build_pr_details_data(title: String, prs: &[PRDetail]) -> TableData {
                 pr.repo.clone(),
                 format!("{} {}", pr.number, pr.title),
                 format_duration(pr.lead_time),
-                pr.size().to_string(),
+                pr.size(&config.size).to_string(),
             ]
         })
         .collect();
@@ -223,6 +224,7 @@ pub fn render_summary(
     data: &MonthData,
     view: View,
     scroll_state: &mut ScrollState,
+    _config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let area = frame.size();
@@ -343,6 +345,7 @@ pub fn render_detail(
     data: &MonthData,
     view: View,
     scroll_state: &mut ScrollState,
+    config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let area = frame.size();
@@ -416,7 +419,7 @@ pub fn render_detail(
                         format_duration(week.avg_lead_time)
                     );
 
-                    let table_data = build_pr_details_data(week_title, prs);
+                    let table_data = build_pr_details_data(week_title, prs, config);
                     let table = table_data_to_widget(&table_data, 0);
                     frame.render_widget(table, detail_chunks[chunk_idx]);
                 }
@@ -434,11 +437,13 @@ pub fn render_detail(
 }
 
 /// Renders the tail view showing all PRs sorted by lead time (longest first).
+/// Renders the tail view showing all PRs sorted by lead time.
 pub fn render_tail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
     view: View,
     scroll_state: &mut ScrollState,
+    config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let area = frame.size();
@@ -482,7 +487,7 @@ pub fn render_tail(
             data.total_prs
         );
 
-        let table_data = build_pr_details_data(prs_title, visible_prs);
+        let table_data = build_pr_details_data(prs_title, visible_prs, config);
         let table = table_data_to_widget(&table_data, 0);
         frame.render_widget(table, chunks[2]);
 

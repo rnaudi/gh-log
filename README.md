@@ -144,6 +144,37 @@ gh-log print --month 2025-01 --force
 - Linux: `~/.cache/gh-log/`
 - Windows: `%LOCALAPPDATA%\gh-log\cache\`
 
+## Configuration
+
+Run `gh-log config` to create a config file, then edit it:
+
+```toml
+[filter]
+# Exclude = hidden completely (not shown)
+exclude_repos = ["username/spam-repo"]
+exclude_patterns = ["^test:", "^tmp:", "^wip:"]
+
+# Ignore = shown but not counted in metrics
+ignore_repos = ["username/personal-notes", "username/scratch"]
+ignore_patterns = ["^docs:", "^meeting:", "^review:"]
+
+[size]
+# Customize S/M/L/XL thresholds (lines changed)
+small = 50
+medium = 200
+large = 500
+```
+
+**What this does:**
+
+- PRs from `spam-repo` won't appear anywhere
+- PRs titled "test: something" or "tmp: debug" won't appear
+- PRs from `personal-notes` appear but don't count in metrics
+- PRs titled "docs: update readme" appear but don't count in metrics
+- Custom sizes: S ≤50, M 51-200, L 201-500, XL >500
+
+Patterns use regex syntax. If a repo is both excluded and ignored, it gets excluded.
+
 ## Metrics
 
 - **Lead Time**: Time from PR creation to merge
