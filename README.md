@@ -51,6 +51,15 @@ GitHub PR analytics for your terminal.
 └────────────────────────────────────────────────────────────────────┘
 ~~~
 
+## Why?
+
+Performance review season rolls around and suddenly you're manually digging through GitHub trying to answer "what did I even do this month?" Clicking through repos, counting PRs, calculating averages, tedious work that I'd rather not spend brain cycles on.
+
+This pulls the data in seconds. Export to JSON, feed it to Claude or ChatGPT, and let the LLM write the boring parts of your review. Or dump it in a spreadsheet if that's your thing.
+
+I keep a private personal repository where I open PRs with prefixes like "docs:", "review:", "meeting:". PRs become the source of truth for most of my work, and the only cost is opening and merging a PR with a descriptive title that an LLM can interpret.
+   
+
 ## Installation
 
 ### Homebrew

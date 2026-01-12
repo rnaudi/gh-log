@@ -1,6 +1,7 @@
 ---
 source: tests/cli_tests.rs
-expression: stdout
+assertion_line: 74
+expression: stderr
 ---
 View your GitHub PRs summary
 

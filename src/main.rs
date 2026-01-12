@@ -18,6 +18,7 @@ use std::process::Command;
 #[derive(Parser)]
 #[command(name = "gh-log")]
 #[command(about = "View your GitHub PRs summary", long_about = None)]
+#[command(version)]
 struct Cli {
     #[command(subcommand)]
     command: Commands,
