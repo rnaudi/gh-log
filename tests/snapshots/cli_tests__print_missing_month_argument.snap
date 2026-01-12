@@ -5,6 +5,6 @@ expression: stderr
 error: the following required arguments were not provided:
   --month <YYYY-MM>
 
-Usage: gh-log print --month <YYYY-MM>
+Usage: gh-log print [OPTIONS] --month <YYYY-MM>
 
 For more information, try '--help'.

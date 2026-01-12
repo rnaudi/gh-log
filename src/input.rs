@@ -1,8 +1,26 @@
 use chrono::{DateTime, Utc};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+
+/// GitHub user information.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Author {
+    pub login: String,
+}
+
+/// GitHub review information.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Review {
+    pub author: Author,
+}
+
+/// Review list wrapper.
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Reviews {
+    pub nodes: Vec<Review>,
+}
 
 /// GitHub repository information.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Repository {
     #[serde(rename = "nameWithOwner")]
     pub name_with_owner: String,
@@ -11,7 +29,7 @@ pub struct Repository {
 /// Pull request data fetched from GitHub GraphQL API.
 ///
 /// Includes timing information, size metrics, and repository details.
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PullRequest {
     pub number: u32,
     pub title: String,
@@ -24,6 +42,7 @@ pub struct PullRequest {
     pub deletions: u32,
     #[serde(rename = "changedFiles")]
     pub changed_files: u32,
+    pub reviews: Reviews,
 }
 
 #[cfg(test)]
@@ -96,6 +115,7 @@ pub mod prop_strategies {
                         additions,
                         deletions,
                         changed_files,
+                        reviews: Reviews { nodes: Vec::new() },
                     }
                 },
             )
