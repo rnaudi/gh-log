@@ -241,12 +241,11 @@ fn get_data_with_cache(
     month: &str,
     use_cache: bool,
 ) -> anyhow::Result<(Vec<input::PullRequest>, usize)> {
-    if use_cache {
-        if let Some(cached) = cache::load_from_cache(month)? {
+    if use_cache
+        && let Some(cached) = cache::load_from_cache(month)? {
             eprintln!("Loading from cache...");
             return Ok((cached.prs, cached.reviewed_count));
         }
-    }
 
     eprintln!("Fetching data from GitHub...");
     let prs = fetch_prs(month)?;
