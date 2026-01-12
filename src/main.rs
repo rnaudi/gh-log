@@ -1,4 +1,5 @@
 mod cache;
+mod config;
 mod data;
 mod input;
 mod view;
@@ -63,6 +64,9 @@ enum Commands {
         #[arg(long, help = "Output data in CSV format")]
         csv: bool,
     },
+    /// Show or create configuration file
+    #[command(name = "config")]
+    Config,
 }
 
 fn parser_month(s: &str) -> anyhow::Result<String> {
@@ -282,22 +286,35 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
 
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let data = data::process_prs(prs, reviewed_count);
+    let config = config::Config::load()?;
+    let data = data::process_prs(prs, reviewed_count, &config);
 
     let mut current_view = view::View::Summary;
     let mut scroll_state = view::ScrollState::default();
 
     loop {
         match current_view {
-            view::View::Summary => {
-                view::render_summary(&mut terminal, &data, current_view, &mut scroll_state)?
-            }
-            view::View::Detail => {
-                view::render_detail(&mut terminal, &data, current_view, &mut scroll_state)?
-            }
-            view::View::Tail => {
-                view::render_tail(&mut terminal, &data, current_view, &mut scroll_state)?
-            }
+            view::View::Summary => view::render_summary(
+                &mut terminal,
+                &data,
+                current_view,
+                &mut scroll_state,
+                &config,
+            )?,
+            view::View::Detail => view::render_detail(
+                &mut terminal,
+                &data,
+                current_view,
+                &mut scroll_state,
+                &config,
+            )?,
+            view::View::Tail => view::render_tail(
+                &mut terminal,
+                &data,
+                current_view,
+                &mut scroll_state,
+                &config,
+            )?,
         }
 
         if event::poll(std::time::Duration::from_millis(100))?
@@ -334,18 +351,19 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
 fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let data = data::process_prs(prs, reviewed_count);
+    let config = config::Config::load()?;
+    let data = data::process_prs(prs, reviewed_count, &config);
 
     match format {
-        OutputFormat::Raw => print_data(&data, month),
-        OutputFormat::Json => print_json(&data)?,
-        OutputFormat::Csv => print_csv(&data)?,
+        OutputFormat::Raw => print_data(&data, month, &config),
+        OutputFormat::Json => print_json(&data, &config)?,
+        OutputFormat::Csv => print_csv(&data, &config)?,
     }
 
     Ok(())
 }
 
-fn print_json(data: &data::MonthData) -> anyhow::Result<()> {
+fn print_json(data: &data::MonthData, config: &config::Config) -> anyhow::Result<()> {
     use serde::Serialize;
 
     #[derive(Serialize)]
@@ -444,7 +462,7 @@ fn print_json(data: &data::MonthData) -> anyhow::Result<()> {
                         number: pr.number,
                         title: &pr.title,
                         lead_time_hours: pr.lead_time.num_seconds() as f64 / 3600.0,
-                        size: pr.size().to_string(),
+                        size: pr.size(&config.size).to_string(),
                         additions: pr.additions,
                         deletions: pr.deletions,
                         changed_files: pr.changed_files,
@@ -474,7 +492,7 @@ fn print_json(data: &data::MonthData) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_csv(data: &data::MonthData) -> anyhow::Result<()> {
+fn print_csv(data: &data::MonthData, config: &config::Config) -> anyhow::Result<()> {
     // Print header
     println!("created_at,repo,number,title,lead_time_hours,size,additions,deletions,changed_files");
 
@@ -489,7 +507,7 @@ fn print_csv(data: &data::MonthData) -> anyhow::Result<()> {
                 pr.number,
                 pr.title.replace("\"", "\"\""), // Escape quotes in CSV
                 lead_time_hours,
-                pr.size(),
+                pr.size(&config.size),
                 pr.additions,
                 pr.deletions,
                 pr.changed_files
@@ -500,7 +518,7 @@ fn print_csv(data: &data::MonthData) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn print_data(data: &data::MonthData, month: &str) {
+fn print_data(data: &data::MonthData, month: &str, config: &config::Config) {
     println!("GitHub PRs for {}", month);
     println!("  - Total PRs: {}", data.total_prs);
     println!(
@@ -549,7 +567,7 @@ fn print_data(data: &data::MonthData, month: &str) {
                 pr.number,
                 pr.title,
                 format_duration(pr.lead_time),
-                pr.size()
+                pr.size(&config.size)
             );
         }
         println!();
@@ -601,6 +619,25 @@ fn main() -> anyhow::Result<()> {
                 OutputFormat::Raw
             };
             run_print_mode(&month, force, format)
+        }
+        Commands::Config => {
+            match directories::ProjectDirs::from("", "", "gh-log") {
+                Some(dirs) => {
+                    let config_path = dirs.config_dir().join("config.toml");
+                    if config_path.exists() {
+                        let config = config::Config::load()?;
+                        println!("{}", toml::to_string_pretty(&config)?);
+                        eprintln!("\n# {}", config_path.display());
+                    } else {
+                        let path = config::Config::create_example()?;
+                        println!("Created config: {}", path.display());
+                    }
+                }
+                None => {
+                    eprintln!("Error: Could not determine config directory");
+                }
+            }
+            Ok(())
         }
     }
 }
@@ -675,14 +712,16 @@ mod tests {
     #[test]
     fn test_print_json_output() {
         let data = create_test_month_data();
-        let result = print_json(&data);
+        let config = config::Config::default();
+        let result = print_json(&data, &config);
         assert!(result.is_ok(), "JSON output should succeed");
     }
 
     #[test]
     fn test_print_csv_output() {
         let data = create_test_month_data();
-        let result = print_csv(&data);
+        let config = config::Config::default();
+        let result = print_csv(&data, &config);
         assert!(result.is_ok(), "CSV output should succeed");
     }
 
