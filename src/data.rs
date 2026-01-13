@@ -124,6 +124,7 @@ pub struct MonthData {
     pub weeks: Vec<WeekData>,
     pub repos: Vec<RepoData>,
     pub prs_by_week: Vec<Vec<PRDetail>>,
+    pub prs_by_repo: Vec<Vec<PRDetail>>,
     pub reviewers: Vec<ReviewerData>,
     pub reviewed_count: usize,
 }
@@ -142,6 +143,7 @@ impl Default for MonthData {
             weeks: Vec::new(),
             repos: Vec::new(),
             prs_by_week: Vec::new(),
+            prs_by_repo: Vec::new(),
             reviewers: Vec::new(),
             reviewed_count: 0,
         }
@@ -236,7 +238,7 @@ pub fn process_prs(
 
         return MonthData {
             month_start,
-            total_prs: 0, // No PRs counted in metrics
+            total_prs: 0,
             avg_lead_time: Duration::zero(),
             frequency: 0.0,
             size_s: 0,
@@ -246,6 +248,7 @@ pub fn process_prs(
             weeks: Vec::new(),
             repos: Vec::new(),
             prs_by_week: Vec::new(),
+            prs_by_repo: Vec::new(),
             reviewers: Vec::new(),
             reviewed_count: 0,
         };
@@ -403,9 +406,34 @@ pub fn process_prs(
         .collect();
     reviewers.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
 
+    let prs_by_repo: Vec<Vec<PRDetail>> = repos
+        .iter()
+        .map(|repo| {
+            by_repo
+                .get(&repo.name)
+                .map(|repo_prs| {
+                    repo_prs
+                        .iter()
+                        .map(|pr| PRDetail {
+                            created_at: pr.created_at,
+                            repo: pr.repo_name.clone(),
+                            number: pr.number,
+                            title: pr.title.clone(),
+                            body: pr.body.clone(),
+                            lead_time: pr.lead_time,
+                            additions: pr.additions,
+                            deletions: pr.deletions,
+                            changed_files: pr.changed_files,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .collect();
+
     MonthData {
         month_start,
-        total_prs: pr_data_for_metrics.len(), // Only count non-excluded PRs
+        total_prs: pr_data_for_metrics.len(),
         avg_lead_time,
         frequency,
         size_s,
@@ -415,6 +443,7 @@ pub fn process_prs(
         weeks: week_data,
         repos,
         prs_by_week: pr_details_by_week,
+        prs_by_repo,
         reviewers,
         reviewed_count,
     }
@@ -534,6 +563,7 @@ mod tests {
             weeks: Vec::new(),
             repos: Vec::new(),
             prs_by_week: Vec::new(),
+            prs_by_repo: Vec::new(),
             reviewers: Vec::new(),
             reviewed_count: 0,
         };

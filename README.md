@@ -43,27 +43,34 @@ View PRs in an interactive terminal interface:
 
 ```bash
 gh-log view --month 2025-01
+gh-log view  # Defaults to current month
 ```
 
 **Navigation:**
 - `s` - Summary view (weekly and repo stats)
-- `d` - Detail view (PRs grouped by week)
+- `d` - Detail view (cycle between by week / by repository)
 - `t` - Tail view (all PRs sorted by lead time)
 - `↑↓` or `j/k` - Scroll
 - `q` - Quit
 
+**Detail View Modes:**
+- Press `d` once to enter detail view (grouped by week)
+- Press `d` again to switch to grouping by repository
+- Press `d` again to cycle back to by week
+
 ### Print Mode
-Print PR summary directly to terminal:
+Print PR summary directly to terminal (includes PR descriptions):
 
 ```bash
 gh-log print --month 2025-01
+gh-log print  # Defaults to current month
 ```
 
 **Output formats:**
 ```bash
-gh-log print --month 2025-01
-gh-log print --month 2025-01 --json
-gh-log print --month 2025-01 --csv
+gh-log print --month 2025-01        # Human-readable with descriptions
+gh-log print --month 2025-01 --json # JSON format
+gh-log print --month 2025-01 --csv  # CSV format
 ```
 
 ~~~
@@ -179,5 +186,5 @@ Patterns use regex syntax. If a repo is both excluded and ignored, it gets exclu
 - **Top Reviewers**: Who reviewed your PRs most
 - **Review Activity**: PRs you reviewed for others
 - **Review Balance**: Ratio of PRs reviewed vs created
-- **Weekly Breakdown**: PRs grouped by week with aggregated metrics
-- **Repository Breakdown**: PR activity grouped by repository
+- **Weekly Breakdown**: PRs grouped by week with aggregated metrics (Detail view by week)
+- **Repository Breakdown**: PRs grouped by repository with aggregated metrics (Detail view by repo)
