@@ -22,11 +22,11 @@ pub struct Repository {
     pub name_with_owner: String,
 }
 
-/// Pull request data from GitHub GraphQL API.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PullRequest {
     pub number: u32,
     pub title: String,
+    pub body: Option<String>,
     pub repository: Repository,
     #[serde(rename = "createdAt")]
     pub created_at: DateTime<Utc>,
@@ -103,6 +103,7 @@ pub mod prop_strategies {
                     PullRequest {
                         number,
                         title,
+                        body: None,
                         repository,
                         created_at,
                         updated_at,

@@ -35,28 +35,28 @@ enum OutputFormat {
 #[derive(Subcommand)]
 enum Commands {
     /// Open interactive TUI to view PRs
-    #[command(override_usage = "gh-log view [OPTIONS] --month <YYYY-MM>")]
+    #[command(override_usage = "gh-log view [OPTIONS]")]
     View {
         #[arg(
             long,
             value_name = "YYYY-MM",
-            help = "Month in format YYYY-MM, e.g. 2025-11",
+            help = "Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)",
             value_parser = parser_month
         )]
-        month: String,
+        month: Option<String>,
         #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
         force: bool,
     },
     /// Print PRs to terminal
-    #[command(override_usage = "gh-log print [OPTIONS] --month <YYYY-MM>")]
+    #[command(override_usage = "gh-log print [OPTIONS]")]
     Print {
         #[arg(
             long,
             value_name = "YYYY-MM",
-            help = "Month in format YYYY-MM, e.g. 2025-11",
+            help = "Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)",
             value_parser = parser_month
         )]
-        month: String,
+        month: Option<String>,
         #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
         force: bool,
         #[arg(long, help = "Output data in JSON format")]
@@ -123,6 +123,7 @@ struct PageInfo {
 struct GraphQLPullRequest {
     number: u32,
     title: String,
+    body: Option<String>,
     repository: input::Repository,
     #[serde(rename = "createdAt")]
     created_at: chrono::DateTime<chrono::Utc>,
@@ -159,6 +160,7 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
       ... on PullRequest {{
         number
         title
+        body
         repository {{
           nameWithOwner
         }}
@@ -200,6 +202,7 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
             all_prs.push(input::PullRequest {
                 number: pr.number,
                 title: pr.title,
+                body: pr.body,
                 repository: pr.repository,
                 created_at: pr.created_at,
                 updated_at: pr.updated_at,
@@ -416,6 +419,7 @@ fn print_json(data: &data::MonthData, config: &config::Config) -> anyhow::Result
         repo: &'a str,
         number: u32,
         title: &'a str,
+        body: Option<&'a str>,
         lead_time_hours: f64,
         size: String,
         additions: u32,
@@ -468,6 +472,7 @@ fn print_json(data: &data::MonthData, config: &config::Config) -> anyhow::Result
                         repo: &pr.repo,
                         number: pr.number,
                         title: &pr.title,
+                        body: pr.body.as_deref(),
                         lead_time_hours: pr.lead_time.num_seconds() as f64 / 3600.0,
                         size: pr.size(&config.size).to_string(),
                         additions: pr.additions,
@@ -501,18 +506,26 @@ fn print_json(data: &data::MonthData, config: &config::Config) -> anyhow::Result
 
 fn print_csv(data: &data::MonthData, config: &config::Config) -> anyhow::Result<()> {
     // Print header
-    println!("created_at,repo,number,title,lead_time_hours,size,additions,deletions,changed_files");
+    println!(
+        "created_at,repo,number,title,body,lead_time_hours,size,additions,deletions,changed_files"
+    );
 
     // Print each PR
     for week_prs in &data.prs_by_week {
         for pr in week_prs {
             let lead_time_hours = pr.lead_time.num_seconds() as f64 / 3600.0;
+            let body_escaped = pr
+                .body
+                .as_ref()
+                .map(|b| b.replace("\"", "\"\"").replace("\n", " "))
+                .unwrap_or_default();
             println!(
-                "{},{},{},\"{}\",{:.2},{},{},{},{}",
+                "{},{},{},\"{}\",\"{}\",{:.2},{},{},{},{}",
                 format_date(pr.created_at),
                 pr.repo,
                 pr.number,
                 pr.title.replace("\"", "\"\""), // Escape quotes in CSV
+                body_escaped,
                 lead_time_hours,
                 pr.size(&config.size),
                 pr.additions,
@@ -576,6 +589,14 @@ fn print_data(data: &data::MonthData, month: &str, config: &config::Config) {
                 format_duration(pr.lead_time),
                 pr.size(&config.size)
             );
+            if let Some(body) = &pr.body
+                && !body.is_empty()
+            {
+                // Indent and display the full body
+                for line in body.lines() {
+                    println!("      {}", line);
+                }
+            }
         }
         println!();
     }
@@ -611,13 +632,17 @@ fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
 
     match cli.command {
-        Commands::View { month, force } => run_view_mode(&month, force),
+        Commands::View { month, force } => {
+            let month = month.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
+            run_view_mode(&month, force)
+        }
         Commands::Print {
             month,
             force,
             json,
             csv,
         } => {
+            let month = month.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
             let format = if json {
                 OutputFormat::Json
             } else if csv {
@@ -760,6 +785,7 @@ mod tests {
                     repo: "test/repo".to_string(),
                     number: 1,
                     title: "Test PR 1".to_string(),
+                    body: None,
                     lead_time: chrono::Duration::hours(1),
                     additions: 10,
                     deletions: 5,
@@ -770,6 +796,7 @@ mod tests {
                     repo: "test/repo".to_string(),
                     number: 2,
                     title: "Test PR 2".to_string(),
+                    body: None,
                     lead_time: chrono::Duration::hours(3),
                     additions: 100,
                     deletions: 50,

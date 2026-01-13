@@ -16,18 +16,13 @@ const HORIZONTAL_MARGIN: u16 = 2;
 const SCROLLBAR_SPACE: u16 = 1;
 const SECTION_SPACING: usize = 1;
 
-/// Available view modes in the TUI.
 #[derive(Clone, Copy)]
 pub enum View {
-    /// Summary view showing weekly and repository statistics.
     Summary,
-    /// Detail view showing PRs grouped by week.
     Detail,
-    /// Tail view showing all PRs sorted by lead time.
     Tail,
 }
 
-/// Manages scrolling state for TUI views.
 pub struct ScrollState {
     position: usize,
     content_height: usize,
@@ -76,7 +71,6 @@ impl ScrollState {
     }
 }
 
-/// Renders the summary view showing weekly and repository statistics.
 pub fn render_summary(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
@@ -101,7 +95,6 @@ pub fn render_summary(
     Ok(())
 }
 
-/// Renders the detail view showing PRs grouped by week.
 pub fn render_detail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
@@ -126,7 +119,6 @@ pub fn render_detail(
     Ok(())
 }
 
-/// Renders the tail view showing all PRs sorted by lead time (longest first).
 pub fn render_tail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,

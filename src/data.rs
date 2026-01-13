@@ -1,10 +1,9 @@
-use chrono::{DateTime, Datelike, Duration, TimeZone, Utc, Weekday};
+use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use std::collections::BTreeMap;
 use std::fmt;
 
 use crate::config::{Config, SizeConfig};
 
-/// Pull request size categorization.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PRSize {
     S,
@@ -24,7 +23,6 @@ impl fmt::Display for PRSize {
     }
 }
 
-/// Computes PR size based on lines changed and file count.
 pub fn compute_pr_size(
     additions: u32,
     deletions: u32,
@@ -54,7 +52,6 @@ pub fn compute_pr_size(
     }
 }
 
-/// Aggregated PR metrics for a single week.
 #[derive(Debug)]
 pub struct WeekData {
     pub week_num: usize,
@@ -64,7 +61,6 @@ pub struct WeekData {
     pub avg_lead_time: Duration,
 }
 
-/// Aggregated PR metrics for a single repository.
 #[derive(Debug)]
 pub struct RepoData {
     pub name: String,
@@ -85,20 +81,19 @@ impl RepoData {
     }
 }
 
-/// Reviewer information showing who reviewed PRs.
 #[derive(Debug, Clone)]
 pub struct ReviewerData {
     pub login: String,
     pub pr_count: usize,
 }
 
-/// Detailed information about a single pull request.
 #[derive(Debug, Clone)]
 pub struct PRDetail {
     pub created_at: DateTime<Utc>,
     pub repo: String,
     pub number: u32,
     pub title: String,
+    pub body: Option<String>,
     pub lead_time: Duration,
     pub additions: u32,
     pub deletions: u32,
@@ -116,7 +111,6 @@ impl PRDetail {
     }
 }
 
-/// Aggregated PR metrics and details for a calendar month.
 #[derive(Debug)]
 pub struct MonthData {
     pub month_start: DateTime<Utc>,
@@ -163,8 +157,7 @@ impl MonthData {
     }
 }
 
-/// Computes the average of a list of durations.
-pub fn avg_duration(durations: &[Duration]) -> Duration {
+fn avg_duration(durations: &[Duration]) -> Duration {
     if durations.is_empty() {
         return Duration::zero();
     }
@@ -176,23 +169,15 @@ pub fn avg_duration(durations: &[Duration]) -> Duration {
 struct PRData {
     number: u32,
     title: String,
+    body: Option<String>,
     created_at: DateTime<Utc>,
     lead_time: Duration,
-    repository: Repository,
+    repo_name: String,
     additions: u32,
     deletions: u32,
     changed_files: u32,
 }
 
-#[derive(Clone)]
-struct Repository {
-    name_with_owner: String,
-}
-
-/// Processes PRs and computes aggregated metrics
-///
-/// Groups by week/repo, calculates lead times and frequency.
-/// Applies config filters: exclude_* (hidden), ignore_* (shown, not in metrics).
 pub fn process_prs(
     prs: Vec<crate::input::PullRequest>,
     reviewed_count: usize,
@@ -216,11 +201,10 @@ pub fn process_prs(
         pr_data.push(PRData {
             number: pr.number,
             title: pr.title.clone(),
+            body: pr.body.clone(),
             created_at: pr.created_at,
             lead_time,
-            repository: Repository {
-                name_with_owner: pr.repository.name_with_owner.clone(),
-            },
+            repo_name: pr.repository.name_with_owner.clone(),
             additions: pr.additions,
             deletions: pr.deletions,
             changed_files: pr.changed_files,
@@ -229,19 +213,14 @@ pub fn process_prs(
 
     pr_data.sort_by_key(|pr| pr.created_at);
 
-    // Filter out excluded PRs completely (they won't be shown at all)
     pr_data.retain(|pr| {
-        !config.should_exclude_repo(&pr.repository.name_with_owner)
-            && !config.should_exclude_pr_title(&pr.title)
+        !config.should_exclude_repo(&pr.repo_name) && !config.should_exclude_pr_title(&pr.title)
     });
 
-    // Separate PRs into those counted in metrics vs all (for display)
-    // Ignored PRs are shown but not counted in metrics
     let pr_data_for_metrics: Vec<&PRData> = pr_data
         .iter()
         .filter(|pr| {
-            !config.should_ignore_repo(&pr.repository.name_with_owner)
-                && !config.should_ignore_pr_title(&pr.title)
+            !config.should_ignore_repo(&pr.repo_name) && !config.should_ignore_pr_title(&pr.title)
         })
         .collect();
 
@@ -275,25 +254,12 @@ pub fn process_prs(
     let first_pr_date = pr_data_for_metrics.first().unwrap().created_at;
     let last_pr_date = pr_data_for_metrics.last().unwrap().created_at;
 
-    let month_start = {
-        let dt = first_pr_date;
-        Utc.with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0)
-            .unwrap()
-    };
+    let month_start = Utc
+        .with_ymd_and_hms(first_pr_date.year(), first_pr_date.month(), 1, 0, 0, 0)
+        .unwrap();
 
-    // Find the Monday of the week containing the first PR
-    let first_pr_weekday = first_pr_date.weekday();
-    let days_from_monday = match first_pr_weekday {
-        Weekday::Mon => 0,
-        Weekday::Tue => 1,
-        Weekday::Wed => 2,
-        Weekday::Thu => 3,
-        Weekday::Fri => 4,
-        Weekday::Sat => 5,
-        Weekday::Sun => 6,
-    };
-    let week1_start = first_pr_date - Duration::days(days_from_monday as i64);
-    let week1_start = week1_start
+    let days_from_monday = first_pr_date.weekday().num_days_from_monday() as i64;
+    let week1_start = (first_pr_date - Duration::days(days_from_monday))
         .date_naive()
         .and_hms_opt(0, 0, 0)
         .unwrap()
@@ -326,7 +292,7 @@ pub fn process_prs(
     let mut by_repo: BTreeMap<String, Vec<PRData>> = BTreeMap::new();
     for pr in &pr_data {
         by_repo
-            .entry(pr.repository.name_with_owner.clone())
+            .entry(pr.repo_name.clone())
             .or_default()
             .push(pr.clone());
     }
@@ -335,17 +301,11 @@ pub fn process_prs(
         &pr_data_for_metrics
             .iter()
             .map(|pr| pr.lead_time)
-            .collect::<Vec<Duration>>(),
+            .collect::<Vec<_>>(),
     );
 
-    // Calculate frequency based on actual time span (only counting included PRs)
     let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
-    let time_span_weeks = time_span_days / 7.0;
-    let frequency = if time_span_weeks > 0.0 {
-        pr_data_for_metrics.len() as f64 / time_span_weeks
-    } else {
-        pr_data_for_metrics.len() as f64
-    };
+    let frequency = pr_data_for_metrics.len() as f64 / (time_span_days / 7.0).max(1.0);
 
     let week_data: Vec<WeekData> = weeks
         .iter()
@@ -368,9 +328,10 @@ pub fn process_prs(
             prs.iter()
                 .map(|pr| PRDetail {
                     created_at: pr.created_at,
-                    repo: pr.repository.name_with_owner.clone(),
+                    repo: pr.repo_name.clone(),
                     number: pr.number,
                     title: pr.title.clone(),
+                    body: pr.body.clone(),
                     lead_time: pr.lead_time,
                     additions: pr.additions,
                     deletions: pr.deletions,
@@ -522,6 +483,7 @@ mod tests {
             repo: "test/repo".to_string(),
             number: 1,
             title: "Test PR".to_string(),
+            body: None,
             lead_time: Duration::hours(1),
             additions: 100,
             deletions: 50,

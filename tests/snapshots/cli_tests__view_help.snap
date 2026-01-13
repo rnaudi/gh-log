@@ -4,9 +4,9 @@ expression: stdout
 ---
 Open interactive TUI to view PRs
 
-Usage: gh-log view [OPTIONS] --month <YYYY-MM>
+Usage: gh-log view [OPTIONS]
 
 Options:
-      --month <YYYY-MM>  Month in format YYYY-MM, e.g. 2025-11
+      --month <YYYY-MM>  Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)
       --force            Force refresh data from GitHub API, bypassing cache
   -h, --help             Print help
