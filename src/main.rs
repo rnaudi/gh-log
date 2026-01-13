@@ -286,7 +286,6 @@ fn get_data_with_cache(
     let prs = fetch_prs(month)?;
     let reviewed_count = fetch_reviewed_prs(month)?;
 
-    // Save to cache
     let cached_data = cache::CachedData {
         month: month.to_string(),
         timestamp: chrono::Utc::now(),
@@ -299,42 +298,30 @@ fn get_data_with_cache(
 }
 
 fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
-    enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen)?;
-
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     let config = config::Config::load()?;
     let data = data::process_prs(prs, reviewed_count, &config);
 
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen)?;
+
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+
     let mut current_view = view::View::Summary;
-    let mut scroll_state = view::ScrollState::default();
+    let mut scroll_state = view::ScrollState::new();
 
     loop {
         match current_view {
-            view::View::Summary => view::render_summary(
-                &mut terminal,
-                &data,
-                current_view,
-                &mut scroll_state,
-                &config,
-            )?,
-            view::View::Detail => view::render_detail(
-                &mut terminal,
-                &data,
-                current_view,
-                &mut scroll_state,
-                &config,
-            )?,
-            view::View::Tail => view::render_tail(
-                &mut terminal,
-                &data,
-                current_view,
-                &mut scroll_state,
-                &config,
-            )?,
+            view::View::Summary => {
+                view::render_summary(&mut terminal, &data, &mut scroll_state, &config)?
+            }
+            view::View::Detail => {
+                view::render_detail(&mut terminal, &data, &mut scroll_state, &config)?
+            }
+            view::View::Tail => {
+                view::render_tail(&mut terminal, &data, &mut scroll_state, &config)?
+            }
         }
 
         if event::poll(std::time::Duration::from_millis(100))?

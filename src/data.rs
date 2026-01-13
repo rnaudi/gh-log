@@ -5,17 +5,11 @@ use std::fmt;
 use crate::config::{Config, SizeConfig};
 
 /// Pull request size categorization.
-///
-/// Computed based on lines changed and files modified.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PRSize {
-    /// Small: <= 50 lines changed
     S,
-    /// Medium: 51-200 lines changed
     M,
-    /// Large: 201-500 lines changed
     L,
-    /// Extra Large: > 500 lines changed
     XL,
 }
 
@@ -30,11 +24,7 @@ impl fmt::Display for PRSize {
     }
 }
 
-/// Computes PR size based on lines changed and file count
-///
-/// Size: S (small), M (medium), L (large), XL (extra large)
-/// Thresholds: configurable via size_config (defaults: 50/200/500)
-/// Overrides: >=25 files = XL, >=15 files = at least L
+/// Computes PR size based on lines changed and file count.
 pub fn compute_pr_size(
     additions: u32,
     deletions: u32,
@@ -87,7 +77,6 @@ pub struct RepoData {
 }
 
 impl RepoData {
-    /// Returns a formatted string of the size distribution (e.g., "18S 0M 0L 0XL").
     pub fn format_size_distribution(&self) -> String {
         format!(
             "{}S {}M {}L {}XL",
@@ -117,7 +106,6 @@ pub struct PRDetail {
 }
 
 impl PRDetail {
-    /// Returns the computed size category for this PR.
     pub fn size(&self, size_config: &SizeConfig) -> PRSize {
         compute_pr_size(
             self.additions,
@@ -167,7 +155,6 @@ impl Default for MonthData {
 }
 
 impl MonthData {
-    /// Returns a formatted string of the size distribution (e.g., "26S 3M 4L 1XL").
     pub fn format_size_distribution(&self) -> String {
         format!(
             "{}S {}M {}L {}XL",
@@ -181,10 +168,7 @@ pub fn avg_duration(durations: &[Duration]) -> Duration {
     if durations.is_empty() {
         return Duration::zero();
     }
-    let mut total_seconds: i64 = 0;
-    for d in durations {
-        total_seconds += d.num_seconds();
-    }
+    let total_seconds: i64 = durations.iter().map(|d| d.num_seconds()).sum();
     Duration::seconds(total_seconds / durations.len() as i64)
 }
 

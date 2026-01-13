@@ -16,7 +16,6 @@ pub struct CachedData {
     pub reviewed_count: usize,
 }
 
-/// Returns the cache file path for a specific month.
 fn get_cache_file_path(month: &str) -> Result<PathBuf> {
     let project_dirs =
         ProjectDirs::from("", "", "gh-log").context("Failed to determine cache directory")?;
@@ -25,12 +24,6 @@ fn get_cache_file_path(month: &str) -> Result<PathBuf> {
     Ok(cache_dir.join(format!("{}.json", month)))
 }
 
-/// Determines if cached data is still fresh based on the month.
-///
-/// Cache TTL rules:
-/// - Current month: 6 hours
-/// - Last month: 24 hours
-/// - Older months: never expires
 fn is_cache_fresh(month: &str, cache_time: DateTime<Utc>) -> bool {
     let now = Utc::now();
     let age = now - cache_time;
@@ -41,11 +34,10 @@ fn is_cache_fresh(month: &str, cache_time: DateTime<Utc>) -> bool {
     match month {
         m if m == current_month => age < Duration::hours(6),
         m if m == last_month => age < Duration::hours(24),
-        _ => true, // Old months never expire
+        _ => true,
     }
 }
 
-/// Loads cached data from disk if it exists and is fresh.
 pub fn load_from_cache(month: &str) -> Result<Option<CachedData>> {
     let cache_file = get_cache_file_path(month)?;
     if !cache_file.exists() {
@@ -53,27 +45,21 @@ pub fn load_from_cache(month: &str) -> Result<Option<CachedData>> {
     }
 
     let contents = fs::read_to_string(&cache_file).context("Failed to read cache file")?;
-
     let cached: CachedData =
         serde_json::from_str(&contents).context("Failed to parse cache file")?;
 
     if is_cache_fresh(month, cached.timestamp) {
         Ok(Some(cached))
     } else {
-        // Cache is stale, remove it
         let _ = fs::remove_file(&cache_file);
         Ok(None)
     }
 }
 
-/// Saves data to cache.
 pub fn save_to_cache(data: &CachedData) -> Result<()> {
     let cache_file = get_cache_file_path(&data.month)?;
-
     let json = serde_json::to_string_pretty(data).context("Failed to serialize cache data")?;
-
     fs::write(&cache_file, json).context("Failed to write cache file")?;
-
     Ok(())
 }
 

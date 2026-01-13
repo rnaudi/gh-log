@@ -1,34 +1,28 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-/// GitHub user information.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Author {
     pub login: String,
 }
 
-/// GitHub review information.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Review {
     pub author: Author,
 }
 
-/// Review list wrapper.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Reviews {
     pub nodes: Vec<Review>,
 }
 
-/// GitHub repository information.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Repository {
     #[serde(rename = "nameWithOwner")]
     pub name_with_owner: String,
 }
 
-/// Pull request data fetched from GitHub GraphQL API.
-///
-/// Includes timing information, size metrics, and repository details.
+/// Pull request data from GitHub GraphQL API.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct PullRequest {
     pub number: u32,
