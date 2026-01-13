@@ -19,8 +19,23 @@ const SECTION_SPACING: usize = 1;
 #[derive(Clone, Copy)]
 pub enum View {
     Summary,
-    Detail,
+    Detail(DetailMode),
     Tail,
+}
+
+#[derive(Clone, Copy)]
+pub enum DetailMode {
+    ByWeek,
+    ByRepo,
+}
+
+impl DetailMode {
+    pub fn cycle(self) -> Self {
+        match self {
+            DetailMode::ByWeek => DetailMode::ByRepo,
+            DetailMode::ByRepo => DetailMode::ByWeek,
+        }
+    }
 }
 
 pub struct ScrollState {
@@ -85,7 +100,7 @@ pub fn render_summary(
         ])
         .areas(frame.size());
 
-        render_controls(frame, controls_area);
+        render_controls(frame, controls_area, View::Summary);
         render_summary_header(frame, summary_area, data);
 
         let lines = build_summary_content(data, content_area.width as usize);
@@ -100,6 +115,7 @@ pub fn render_detail(
     data: &MonthData,
     scroll_state: &mut ScrollState,
     config: &Config,
+    mode: DetailMode,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let [controls_area, summary_area, content_area] = Layout::vertical([
@@ -109,10 +125,17 @@ pub fn render_detail(
         ])
         .areas(frame.size());
 
-        render_controls(frame, controls_area);
-        render_summary_header(frame, summary_area, data);
+        render_controls(frame, controls_area, View::Detail(mode));
+        render_detail_header(frame, summary_area, data, mode);
 
-        let lines = build_detail_content(data, config, content_area.width as usize);
+        let lines = match mode {
+            DetailMode::ByWeek => {
+                build_detail_by_week_content(data, config, content_area.width as usize)
+            }
+            DetailMode::ByRepo => {
+                build_detail_by_repo_content(data, config, content_area.width as usize)
+            }
+        };
         render_scrollable_content(frame, content_area, lines, scroll_state);
     })?;
 
@@ -133,7 +156,7 @@ pub fn render_tail(
         ])
         .areas(frame.size());
 
-        render_controls(frame, controls_area);
+        render_controls(frame, controls_area, View::Tail);
         render_summary_header(frame, summary_area, data);
 
         let lines = build_tail_content(data, config, content_area.width as usize);
@@ -143,12 +166,18 @@ pub fn render_tail(
     Ok(())
 }
 
-fn render_controls(frame: &mut Frame, area: Rect) {
+fn render_controls(frame: &mut Frame, area: Rect, current_view: View) {
+    let detail_label = match current_view {
+        View::Detail(DetailMode::ByWeek) => "By Repo",
+        View::Detail(DetailMode::ByRepo) => "By Week",
+        _ => "Details",
+    };
+
     let controls = Line::from(vec![
         Span::styled("s", Style::default().fg(Color::Gray).bold()),
         Span::raw(": Summary │ "),
         Span::styled("d", Style::default().fg(Color::Gray).bold()),
-        Span::raw(": Details │ "),
+        Span::raw(format!(": {} │ ", detail_label)),
         Span::styled("t", Style::default().fg(Color::Gray).bold()),
         Span::raw(": Tail │ "),
         Span::styled("↑↓/jk", Style::default().fg(Color::Gray).bold()),
@@ -162,6 +191,62 @@ fn render_controls(frame: &mut Frame, area: Rect) {
             .border_style(Style::default().fg(Color::DarkGray)),
     );
     frame.render_widget(widget, area);
+}
+
+fn render_detail_header(frame: &mut Frame, area: Rect, data: &MonthData, mode: DetailMode) {
+    let month_year = format_month(data.month_start);
+    let mode_label = match mode {
+        DetailMode::ByWeek => "by Week",
+        DetailMode::ByRepo => "by Repository",
+    };
+    let review_ratio = if data.total_prs > 0 {
+        data.reviewed_count as f64 / data.total_prs as f64
+    } else {
+        0.0
+    };
+
+    let summary_lines = vec![
+        Line::from(vec![
+            Span::raw("GitHub PRs for "),
+            Span::styled(month_year, Style::default().bold()),
+            Span::raw(" — "),
+            Span::styled(mode_label, Style::default().fg(Color::Cyan)),
+        ]),
+        Line::from(vec![
+            Span::raw("Total PRs: "),
+            Span::styled(data.total_prs.to_string(), Style::default().fg(Color::Blue)),
+            Span::raw(" │ Avg Lead Time: "),
+            Span::styled(
+                format_duration(data.avg_lead_time),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw(" │ Frequency: "),
+            Span::styled(
+                format_frequency(data.frequency),
+                Style::default().fg(Color::Green),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("Sizes: "),
+            Span::raw(data.format_size_distribution()),
+            Span::raw(" │ Review Balance: "),
+            Span::styled(
+                format!("{:.1}:1", review_ratio),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(
+                format!(" ({} reviewed)", data.reviewed_count),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+    ];
+
+    let header = Paragraph::new(summary_lines).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+    frame.render_widget(header, area);
 }
 
 fn render_summary_header(frame: &mut Frame, area: Rect, data: &MonthData) {
@@ -333,7 +418,11 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
-fn build_detail_content(data: &MonthData, config: &Config, width: usize) -> Vec<Line<'static>> {
+fn build_detail_by_week_content(
+    data: &MonthData,
+    config: &Config,
+    width: usize,
+) -> Vec<Line<'static>> {
     let usable_width = width
         .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
         .saturating_sub(SCROLLBAR_SPACE as usize);
@@ -355,6 +444,86 @@ fn build_detail_content(data: &MonthData, config: &Config, width: usize) -> Vec<
         );
         lines.push(
             Line::from(pad_line(&week_header, usable_width, '━'))
+                .style(Style::default().fg(Color::Gray)),
+        );
+
+        for pr in prs {
+            let pr_size = pr.size(&config.size);
+            let size_color = match pr_size {
+                PRSize::S => Color::Green,
+                PRSize::M => Color::Blue,
+                PRSize::L => Color::Yellow,
+                PRSize::XL => Color::Red,
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format_date_short(pr.created_at),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!(
+                        "{:repo_w$}",
+                        truncate(&pr.repo, repo_width),
+                        repo_w = repo_width
+                    ),
+                    Style::default().fg(Color::Blue),
+                ),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!("#{:4}", pr.number),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(" "),
+                Span::raw(format!(
+                    "{:title_w$}",
+                    truncate(&pr.title, title_width),
+                    title_w = title_width
+                )),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!("{:8}", format_duration(pr.lead_time)),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::raw(" │ "),
+                Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
+            ]));
+        }
+        for _ in 0..SECTION_SPACING {
+            lines.push(Line::from(""));
+        }
+    }
+
+    lines
+}
+
+fn build_detail_by_repo_content(
+    data: &MonthData,
+    config: &Config,
+    width: usize,
+) -> Vec<Line<'static>> {
+    let usable_width = width
+        .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
+        .saturating_sub(SCROLLBAR_SPACE as usize);
+
+    let fixed_width = 6 + 3 + 3 + 5 + 3 + 3 + 8 + 3 + 2;
+    let remaining = usable_width.saturating_sub(fixed_width).max(30);
+    let repo_width = (remaining / 3).max(10);
+    let title_width = remaining.saturating_sub(repo_width).max(15);
+
+    let mut lines = Vec::new();
+
+    for (repo, prs) in data.repos.iter().zip(data.prs_by_repo.iter()) {
+        let repo_header = format!(
+            "━━━ {} │ {} PRs │ Avg: {} │ [{}]",
+            repo.name,
+            repo.pr_count,
+            format_duration(repo.avg_lead_time),
+            repo.format_size_distribution()
+        );
+        lines.push(
+            Line::from(pad_line(&repo_header, usable_width, '━'))
                 .style(Style::default().fg(Color::Gray)),
         );
 

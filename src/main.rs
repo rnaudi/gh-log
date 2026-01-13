@@ -319,8 +319,8 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
             view::View::Summary => {
                 view::render_summary(&mut terminal, &data, &mut scroll_state, &config)?
             }
-            view::View::Detail => {
-                view::render_detail(&mut terminal, &data, &mut scroll_state, &config)?
+            view::View::Detail(mode) => {
+                view::render_detail(&mut terminal, &data, &mut scroll_state, &config, mode)?
             }
             view::View::Tail => {
                 view::render_tail(&mut terminal, &data, &mut scroll_state, &config)?
@@ -338,7 +338,10 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
                     scroll_state.reset();
                 }
                 KeyCode::Char('d') => {
-                    current_view = view::View::Detail;
+                    current_view = match current_view {
+                        view::View::Detail(mode) => view::View::Detail(mode.cycle()),
+                        _ => view::View::Detail(view::DetailMode::ByWeek),
+                    };
                     scroll_state.reset();
                 }
                 KeyCode::Char('t') => {
@@ -803,6 +806,7 @@ mod tests {
                     changed_files: 5,
                 },
             ]],
+            prs_by_repo: vec![],
             reviewers: vec![data::ReviewerData {
                 login: "alice".to_string(),
                 pr_count: 2,
