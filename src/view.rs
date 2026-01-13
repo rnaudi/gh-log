@@ -1,15 +1,20 @@
 use chrono::{DateTime, Datelike, Duration, Utc};
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::CrosstermBackend,
-    layout::{Constraint, Layout},
-    style::Stylize,
-    widgets::{Block, Borders, Paragraph, Row, Scrollbar, ScrollbarState, Table},
+    layout::{Constraint, Layout, Margin, Rect},
+    style::{Color, Style, Stylize},
+    text::{Line, Span},
+    widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
 use std::io::Result;
 
 use crate::config::Config;
-use crate::data::{MonthData, PRDetail, RepoData, WeekData};
+use crate::data::{MonthData, PRDetail, PRSize};
+
+const HORIZONTAL_MARGIN: u16 = 2;
+const SCROLLBAR_SPACE: u16 = 1;
+const SECTION_SPACING: usize = 1;
 
 /// Available view modes in the TUI.
 #[derive(Clone, Copy)]
@@ -22,318 +27,75 @@ pub enum View {
     Tail,
 }
 
-impl View {
-    pub fn name(&self) -> &'static str {
-        match self {
-            View::Summary => "Summary",
-            View::Detail => "Detail",
-            View::Tail => "Tail",
-        }
-    }
-}
-
 /// Manages scrolling state for TUI views.
 pub struct ScrollState {
-    offset: usize,
+    position: usize,
     content_height: usize,
     viewport_height: usize,
 }
 
 impl ScrollState {
-    pub fn default() -> Self {
+    pub fn new() -> Self {
         Self {
-            offset: 0,
+            position: 0,
             content_height: 0,
             viewport_height: 0,
         }
     }
 
     pub fn reset(&mut self) {
-        self.offset = 0;
-    }
-
-    pub fn set_content_height(&mut self, height: usize) {
-        self.content_height = height;
-        self.adjust_offset();
-    }
-
-    pub fn set_viewport_height(&mut self, height: usize) {
-        self.viewport_height = height;
-        self.adjust_offset();
+        self.position = 0;
     }
 
     pub fn scroll_up(&mut self) {
-        if self.offset > 0 {
-            self.offset -= 1;
-        }
+        self.position = self.position.saturating_sub(1);
     }
 
     pub fn scroll_down(&mut self) {
-        if self.offset < self.max_offset() {
-            self.offset += 1;
+        let max = self.max_scroll();
+        if self.position < max {
+            self.position += 1;
         }
     }
 
-    pub fn offset(&self) -> usize {
-        self.offset
-    }
-
-    fn max_offset(&self) -> usize {
+    fn max_scroll(&self) -> usize {
         self.content_height.saturating_sub(self.viewport_height)
     }
 
-    fn adjust_offset(&mut self) {
-        self.offset = self.offset.min(self.max_offset());
+    fn set_content_height(&mut self, height: usize) {
+        self.content_height = height;
     }
-}
 
-// Simple domain structures - no ratatui dependencies
-struct TableData {
-    title: String,
-    headers: Vec<String>,
-    rows: Vec<Vec<String>>,
-}
-
-// Build domain data structures
-fn build_weeks_data(weeks: &[WeekData]) -> TableData {
-    let headers = vec![
-        "Week".to_string(),
-        "PRs".to_string(),
-        "Avg Lead Time".to_string(),
-    ];
-    let rows = weeks
-        .iter()
-        .map(|w| {
-            vec![
-                format!(
-                    "{} ({})",
-                    w.week_num,
-                    format_date_range(w.week_start, w.week_end)
-                ),
-                w.pr_count.to_string(),
-                format_duration(w.avg_lead_time),
-            ]
-        })
-        .collect();
-
-    TableData {
-        title: "Weeks".to_string(),
-        headers,
-        rows,
+    fn set_viewport_height(&mut self, height: usize) {
+        self.viewport_height = height;
     }
-}
 
-fn build_repos_data(repos: &[RepoData]) -> TableData {
-    let headers = vec![
-        "Repository".to_string(),
-        "PRs".to_string(),
-        "Avg Lead Time".to_string(),
-        "Sizes".to_string(),
-    ];
-    let rows = repos
-        .iter()
-        .map(|r| {
-            vec![
-                r.name.clone(),
-                r.pr_count.to_string(),
-                format_duration(r.avg_lead_time),
-                r.format_size_distribution(),
-            ]
-        })
-        .collect();
-
-    TableData {
-        title: "Repositories".to_string(),
-        headers,
-        rows,
+    fn as_scrollbar_state(&self) -> ScrollbarState {
+        let scrollable_content = self.max_scroll().max(1);
+        ScrollbarState::new(scrollable_content).position(self.position)
     }
-}
-
-fn build_reviewers_data(reviewers: &[crate::data::ReviewerData]) -> TableData {
-    let headers = vec!["Reviewer".to_string(), "PRs".to_string()];
-    let rows = reviewers
-        .iter()
-        .take(10)
-        .map(|r| vec![r.login.clone(), r.pr_count.to_string()])
-        .collect();
-
-    TableData {
-        title: "Top Reviewers".to_string(),
-        headers,
-        rows,
-    }
-}
-
-fn build_pr_details_data(title: String, prs: &[PRDetail], config: &Config) -> TableData {
-    let headers = vec![
-        "Date".to_string(),
-        "Repository".to_string(),
-        "PR".to_string(),
-        "Lead Time".to_string(),
-        "Size".to_string(),
-    ];
-    let rows = prs
-        .iter()
-        .map(|pr| {
-            vec![
-                format_date(pr.created_at),
-                pr.repo.clone(),
-                format!("{} {}", pr.number, pr.title),
-                format_duration(pr.lead_time),
-                pr.size(&config.size).to_string(),
-            ]
-        })
-        .collect();
-
-    TableData {
-        title,
-        headers,
-        rows,
-    }
-}
-
-// Convert domain data to ratatui widget
-fn table_data_to_widget(data: &TableData, scroll_offset: usize) -> Table<'static> {
-    let visible_rows = if scroll_offset < data.rows.len() {
-        &data.rows[scroll_offset..]
-    } else {
-        &[]
-    };
-
-    let rows: Vec<Row> = visible_rows
-        .iter()
-        .map(|row| Row::new(row.clone()))
-        .collect();
-
-    let header = Row::new(data.headers.clone()).bold();
-    let constraints = vec![Constraint::Min(0); data.headers.len()];
-
-    Table::new(rows, constraints)
-        .header(header)
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .title(data.title.clone()),
-        )
-        .column_spacing(1)
 }
 
 /// Renders the summary view showing weekly and repository statistics.
 pub fn render_summary(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
-    view: View,
     scroll_state: &mut ScrollState,
     _config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
-        let area = frame.size();
-
-        let chunks = Layout::vertical([
-            Constraint::Length(1),
+        let [controls_area, summary_area, content_area] = Layout::vertical([
             Constraint::Length(2),
-            Constraint::Length(1),
-            Constraint::Length(1),
+            Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .split(area);
+        .areas(frame.size());
 
-        // View header
-        let help_text = format!(
-            "View: {} | [s] Summary | [d] Detail | [t] Tail | [q] Quit | [↑↓/jk] Scroll",
-            view.name()
-        );
-        frame.render_widget(Paragraph::new(help_text).bold(), chunks[0]);
+        render_controls(frame, controls_area);
+        render_summary_header(frame, summary_area, data);
 
-        // Month stats header
-        let header_chunks =
-            Layout::vertical([Constraint::Length(1), Constraint::Length(1)]).split(chunks[1]);
-
-        frame.render_widget(
-            Paragraph::new(format_month(data.month_start)).bold(),
-            header_chunks[0],
-        );
-
-        let stats = Layout::horizontal([
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-            Constraint::Percentage(25),
-        ])
-        .split(header_chunks[1]);
-
-        frame.render_widget(Paragraph::new(format!("PRs: {}", data.total_prs)), stats[0]);
-        frame.render_widget(
-            Paragraph::new(format!(
-                "Avg Lead Time: {}",
-                format_duration(data.avg_lead_time)
-            )),
-            stats[1],
-        );
-        frame.render_widget(
-            Paragraph::new(format!("Frequency: {}", format_frequency(data.frequency))),
-            stats[2],
-        );
-        frame.render_widget(
-            Paragraph::new(format!("Sizes: {}", data.format_size_distribution())),
-            stats[3],
-        );
-
-        // Review Activity
-        let review_ratio = if data.total_prs > 0 {
-            data.reviewed_count as f64 / data.total_prs as f64
-        } else {
-            0.0
-        };
-        let review_text = format!(
-            "My Review Activity: {} PRs reviewed | Review Balance: {:.1}:1",
-            data.reviewed_count, review_ratio
-        );
-        frame.render_widget(Paragraph::new(review_text), chunks[3]);
-
-        // Tables
-        let layout = if area.width > 150 {
-            Layout::horizontal([
-                Constraint::Percentage(33),
-                Constraint::Length(1),
-                Constraint::Percentage(34),
-                Constraint::Length(1),
-                Constraint::Percentage(33),
-            ])
-        } else {
-            Layout::vertical([
-                Constraint::Min(0),
-                Constraint::Length(1),
-                Constraint::Min(0),
-                Constraint::Length(1),
-                Constraint::Min(0),
-            ])
-        };
-        let table_chunks = layout.split(chunks[4]);
-
-        let viewport_height = table_chunks[0].height as usize;
-        let max_table_height = data
-            .weeks
-            .len()
-            .max(data.repos.len())
-            .max(data.reviewers.len())
-            + 2;
-        scroll_state.set_viewport_height(viewport_height);
-        scroll_state.set_content_height(max_table_height);
-
-        let scroll_offset = scroll_state.offset();
-
-        let weeks_data = build_weeks_data(&data.weeks);
-        let weeks_table = table_data_to_widget(&weeks_data, scroll_offset);
-        frame.render_widget(weeks_table, table_chunks[0]);
-
-        let repos_data = build_repos_data(&data.repos);
-        let repos_table = table_data_to_widget(&repos_data, scroll_offset);
-        frame.render_widget(repos_table, table_chunks[2]);
-
-        let reviewers_data = build_reviewers_data(&data.reviewers);
-        let reviewers_table = table_data_to_widget(&reviewers_data, scroll_offset);
-        frame.render_widget(reviewers_table, table_chunks[4]);
+        let lines = build_summary_content(data, content_area.width as usize);
+        render_scrollable_content(frame, content_area, lines, scroll_state);
     })?;
 
     Ok(())
@@ -343,161 +105,400 @@ pub fn render_summary(
 pub fn render_detail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
-    view: View,
     scroll_state: &mut ScrollState,
     config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
-        let area = frame.size();
-        let chunks = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(1),
+        let [controls_area, summary_area, content_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .split(area);
+        .areas(frame.size());
 
-        // View header
-        let help_text = format!(
-            "View: {} | [s] Summary | [d] Detail | [t] Tail | [q] Quit | [↑↓/jk] Scroll",
-            view.name()
-        );
-        frame.render_widget(Paragraph::new(help_text).bold(), chunks[0]);
+        render_controls(frame, controls_area);
+        render_summary_header(frame, summary_area, data);
 
-        frame.render_widget(
-            Paragraph::new(format_month(data.month_start)).bold(),
-            chunks[1],
-        );
-
-        let detail_height = chunks[2].height as usize;
-        scroll_state.set_viewport_height(detail_height);
-
-        let total_weeks = data.weeks.len();
-        // Each week needs: title (1) + header (1) + rows (N) + borders (2) + spacing (1) = N + 5
-        let avg_rows_per_week = if total_weeks > 0 {
-            data.total_prs / total_weeks
-        } else {
-            0
-        };
-        let estimated_week_height = avg_rows_per_week + 5;
-        let total_content_height = total_weeks * estimated_week_height;
-        scroll_state.set_content_height(total_content_height);
-
-        if detail_height > 0 {
-            let scroll_offset = scroll_state.offset();
-            let start_week = scroll_offset / estimated_week_height;
-            let visible_weeks = (detail_height / estimated_week_height).max(1) + 1;
-            let end_week = (start_week + visible_weeks).min(total_weeks);
-
-            if start_week < total_weeks {
-                let weeks_to_show = &data.weeks[start_week..end_week];
-                let prs_to_show: Vec<&Vec<PRDetail>> =
-                    data.prs_by_week[start_week..end_week].iter().collect();
-
-                // Calculate constraints dynamically based on actual content
-                let mut constraints = Vec::new();
-                for (i, _week) in weeks_to_show.iter().enumerate() {
-                    let prs = prs_to_show[i];
-                    let table_height = prs.len() + 3; // rows + header + borders
-                    constraints.push(Constraint::Length(table_height as u16));
-                    if i < weeks_to_show.len() - 1 {
-                        constraints.push(Constraint::Length(1)); // spacing
-                    }
-                }
-
-                let detail_chunks = Layout::vertical(constraints).split(chunks[2]);
-
-                for (local_idx, (week, prs)) in
-                    weeks_to_show.iter().zip(prs_to_show.iter()).enumerate()
-                {
-                    let chunk_idx = local_idx * 2;
-
-                    let week_title = format!(
-                        "Week {} ({}) - PRs: {} | Avg Lead Time: {}",
-                        week.week_num,
-                        format_date_range(week.week_start, week.week_end),
-                        week.pr_count,
-                        format_duration(week.avg_lead_time)
-                    );
-
-                    let table_data = build_pr_details_data(week_title, prs, config);
-                    let table = table_data_to_widget(&table_data, 0);
-                    frame.render_widget(table, detail_chunks[chunk_idx]);
-                }
-            }
-
-            let mut scrollbar_state =
-                ScrollbarState::new(total_content_height).position(scroll_offset);
-            let scrollbar = Scrollbar::default()
-                .orientation(ratatui::widgets::ScrollbarOrientation::VerticalRight);
-            frame.render_stateful_widget(scrollbar, chunks[2], &mut scrollbar_state);
-        }
+        let lines = build_detail_content(data, config, content_area.width as usize);
+        render_scrollable_content(frame, content_area, lines, scroll_state);
     })?;
 
     Ok(())
 }
 
 /// Renders the tail view showing all PRs sorted by lead time (longest first).
-/// Renders the tail view showing all PRs sorted by lead time.
 pub fn render_tail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
-    view: View,
     scroll_state: &mut ScrollState,
     config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
-        let area = frame.size();
-
-        let mut all_prs: Vec<PRDetail> = data.prs_by_week.iter().flatten().cloned().collect();
-        all_prs.sort_by(|a, b| b.lead_time.cmp(&a.lead_time));
-
-        let chunks = Layout::vertical([
-            Constraint::Length(1),
-            Constraint::Length(1),
+        let [controls_area, summary_area, content_area] = Layout::vertical([
+            Constraint::Length(2),
+            Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .split(area);
+        .areas(frame.size());
 
-        // View header
-        let help_text = format!(
-            "View: {} | [s] Summary | [d] Detail | [t] Tail | [q] Quit | [↑↓/jk] Scroll",
-            view.name()
-        );
-        frame.render_widget(Paragraph::new(help_text).bold(), chunks[0]);
+        render_controls(frame, controls_area);
+        render_summary_header(frame, summary_area, data);
 
-        frame.render_widget(
-            Paragraph::new(format_month(data.month_start)).bold(),
-            chunks[1],
-        );
-
-        let viewport_height = chunks[2].height as usize;
-        let content_height = all_prs.len() + 2;
-        scroll_state.set_viewport_height(viewport_height);
-        scroll_state.set_content_height(content_height);
-
-        let scroll_offset = scroll_state.offset();
-        let visible_prs = if scroll_offset < all_prs.len() {
-            &all_prs[scroll_offset..]
-        } else {
-            &[]
-        };
-
-        let prs_title = format!(
-            "All PRs sorted by Lead Time (longest first) - Total: {}",
-            data.total_prs
-        );
-
-        let table_data = build_pr_details_data(prs_title, visible_prs, config);
-        let table = table_data_to_widget(&table_data, 0);
-        frame.render_widget(table, chunks[2]);
-
-        let mut scrollbar_state = ScrollbarState::new(content_height).position(scroll_offset);
-        let scrollbar =
-            Scrollbar::default().orientation(ratatui::widgets::ScrollbarOrientation::VerticalRight);
-        frame.render_stateful_widget(scrollbar, chunks[2], &mut scrollbar_state);
+        let lines = build_tail_content(data, config, content_area.width as usize);
+        render_scrollable_content(frame, content_area, lines, scroll_state);
     })?;
 
     Ok(())
+}
+
+fn render_controls(frame: &mut Frame, area: Rect) {
+    let controls = Line::from(vec![
+        Span::styled("s", Style::default().fg(Color::Gray).bold()),
+        Span::raw(": Summary │ "),
+        Span::styled("d", Style::default().fg(Color::Gray).bold()),
+        Span::raw(": Details │ "),
+        Span::styled("t", Style::default().fg(Color::Gray).bold()),
+        Span::raw(": Tail │ "),
+        Span::styled("↑↓/jk", Style::default().fg(Color::Gray).bold()),
+        Span::raw(": Scroll │ "),
+        Span::styled("q", Style::default().fg(Color::Gray).bold()),
+        Span::raw(": Quit"),
+    ]);
+    let widget = Paragraph::new(controls).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+    frame.render_widget(widget, area);
+}
+
+fn render_summary_header(frame: &mut Frame, area: Rect, data: &MonthData) {
+    let month_year = format_month(data.month_start);
+    let review_ratio = if data.total_prs > 0 {
+        data.reviewed_count as f64 / data.total_prs as f64
+    } else {
+        0.0
+    };
+
+    let summary_lines = vec![
+        Line::from(vec![
+            Span::raw("GitHub PRs for "),
+            Span::styled(month_year, Style::default().bold()),
+        ]),
+        Line::from(vec![
+            Span::raw("Total PRs: "),
+            Span::styled(data.total_prs.to_string(), Style::default().fg(Color::Blue)),
+            Span::raw(" │ Avg Lead Time: "),
+            Span::styled(
+                format_duration(data.avg_lead_time),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw(" │ Frequency: "),
+            Span::styled(
+                format_frequency(data.frequency),
+                Style::default().fg(Color::Green),
+            ),
+        ]),
+        Line::from(vec![
+            Span::raw("Sizes: "),
+            Span::raw(data.format_size_distribution()),
+            Span::raw(" │ Review Balance: "),
+            Span::styled(
+                format!("{:.1}:1", review_ratio),
+                Style::default().fg(Color::Cyan),
+            ),
+            Span::styled(
+                format!(" ({} reviewed)", data.reviewed_count),
+                Style::default().fg(Color::DarkGray),
+            ),
+        ]),
+    ];
+
+    let header = Paragraph::new(summary_lines).block(
+        Block::default()
+            .borders(Borders::BOTTOM)
+            .border_style(Style::default().fg(Color::DarkGray)),
+    );
+    frame.render_widget(header, area);
+}
+
+fn render_scrollable_content(
+    frame: &mut Frame,
+    area: Rect,
+    lines: Vec<Line>,
+    scroll_state: &mut ScrollState,
+) {
+    scroll_state.set_content_height(lines.len());
+    scroll_state.set_viewport_height(
+        area.inner(Margin {
+            horizontal: HORIZONTAL_MARGIN,
+            vertical: 0,
+        })
+        .height as usize,
+    );
+
+    let content_area = area.inner(Margin {
+        horizontal: HORIZONTAL_MARGIN,
+        vertical: 0,
+    });
+    let content = Paragraph::new(lines).scroll((scroll_state.position as u16, 0));
+    frame.render_widget(content, content_area);
+
+    let scrollbar = Scrollbar::new(ScrollbarOrientation::VerticalRight);
+    let mut scrollbar_state = scroll_state.as_scrollbar_state();
+    frame.render_stateful_widget(scrollbar, area, &mut scrollbar_state);
+}
+
+fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
+    let usable_width = width
+        .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
+        .saturating_sub(SCROLLBAR_SPACE as usize);
+
+    let mut lines = Vec::new();
+
+    lines.push(
+        Line::from(separator_line("Weeks", usable_width)).style(Style::default().fg(Color::Gray)),
+    );
+    for week in &data.weeks {
+        lines.push(Line::from(vec![
+            Span::raw("Week "),
+            Span::styled(week.week_num.to_string(), Style::default().bold()),
+            Span::raw(format!(
+                " ({:12}) │ ",
+                format_date_range_short(week.week_start, week.week_end)
+            )),
+            Span::styled(
+                format!("{:2}", week.pr_count),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw(" PRs │ Avg: "),
+            Span::styled(
+                format_duration(week.avg_lead_time),
+                Style::default().fg(Color::Yellow),
+            ),
+        ]));
+    }
+    for _ in 0..SECTION_SPACING {
+        lines.push(Line::from(""));
+    }
+
+    // Repositories section - dynamic width
+    let repo_name_width = (usable_width.saturating_sub(30)).max(20);
+    lines.push(
+        Line::from(separator_line("Repositories", usable_width))
+            .style(Style::default().fg(Color::Gray)),
+    );
+    for repo in &data.repos {
+        lines.push(Line::from(vec![
+            Span::styled(
+                format!(
+                    "{:width$}",
+                    truncate(&repo.name, repo_name_width),
+                    width = repo_name_width
+                ),
+                Style::default().fg(Color::Blue),
+            ),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("{:2}", repo.pr_count),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw(" PRs │ Avg: "),
+            Span::styled(
+                format!("{:8}", format_duration(repo.avg_lead_time)),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw(" │ "),
+            Span::raw(repo.format_size_distribution()),
+        ]));
+    }
+    for _ in 0..SECTION_SPACING {
+        lines.push(Line::from(""));
+    }
+
+    // Top Reviewers section - dynamic width
+    let reviewer_name_width = (usable_width.saturating_sub(15)).max(20);
+    lines.push(
+        Line::from(separator_line("Top Reviewers", usable_width))
+            .style(Style::default().fg(Color::Gray)),
+    );
+    for reviewer in data.reviewers.iter().take(10) {
+        lines.push(Line::from(vec![
+            Span::raw(format!(
+                "{:width$}",
+                truncate(&reviewer.login, reviewer_name_width),
+                width = reviewer_name_width
+            )),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("{}", reviewer.pr_count),
+                Style::default().fg(Color::Green),
+            ),
+            Span::raw(" PRs"),
+        ]));
+    }
+
+    lines
+}
+
+fn build_detail_content(data: &MonthData, config: &Config, width: usize) -> Vec<Line<'static>> {
+    let usable_width = width
+        .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
+        .saturating_sub(SCROLLBAR_SPACE as usize);
+
+    let fixed_width = 6 + 3 + 3 + 5 + 3 + 3 + 8 + 3 + 2;
+    let remaining = usable_width.saturating_sub(fixed_width).max(30);
+    let repo_width = (remaining / 3).max(10);
+    let title_width = remaining.saturating_sub(repo_width).max(15);
+
+    let mut lines = Vec::new();
+
+    for (week, prs) in data.weeks.iter().zip(data.prs_by_week.iter()) {
+        let week_header = format!(
+            "━━━ Week {} ({}) │ {} PRs │ Avg: {}",
+            week.week_num,
+            format_date_range_short(week.week_start, week.week_end),
+            week.pr_count,
+            format_duration(week.avg_lead_time)
+        );
+        lines.push(
+            Line::from(pad_line(&week_header, usable_width, '━'))
+                .style(Style::default().fg(Color::Gray)),
+        );
+
+        for pr in prs {
+            let pr_size = pr.size(&config.size);
+            let size_color = match pr_size {
+                PRSize::S => Color::Green,
+                PRSize::M => Color::Blue,
+                PRSize::L => Color::Yellow,
+                PRSize::XL => Color::Red,
+            };
+
+            lines.push(Line::from(vec![
+                Span::styled(
+                    format_date_short(pr.created_at),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!(
+                        "{:repo_w$}",
+                        truncate(&pr.repo, repo_width),
+                        repo_w = repo_width
+                    ),
+                    Style::default().fg(Color::Blue),
+                ),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!("#{:4}", pr.number),
+                    Style::default().fg(Color::DarkGray),
+                ),
+                Span::raw(" "),
+                Span::raw(format!(
+                    "{:title_w$}",
+                    truncate(&pr.title, title_width),
+                    title_w = title_width
+                )),
+                Span::raw(" │ "),
+                Span::styled(
+                    format!("{:8}", format_duration(pr.lead_time)),
+                    Style::default().fg(Color::Yellow),
+                ),
+                Span::raw(" │ "),
+                Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
+            ]));
+        }
+        for _ in 0..SECTION_SPACING {
+            lines.push(Line::from(""));
+        }
+    }
+
+    lines
+}
+
+fn build_tail_content(data: &MonthData, config: &Config, width: usize) -> Vec<Line<'static>> {
+    let mut all_prs: Vec<PRDetail> = data.prs_by_week.iter().flatten().cloned().collect();
+    all_prs.sort_by(|a, b| b.lead_time.cmp(&a.lead_time));
+
+    let usable_width = width
+        .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
+        .saturating_sub(SCROLLBAR_SPACE as usize);
+
+    let fixed_width = 6 + 3 + 3 + 5 + 3 + 3 + 8 + 3 + 2;
+    let remaining = usable_width.saturating_sub(fixed_width).max(30);
+    let repo_width = (remaining / 3).max(10);
+    let title_width = remaining.saturating_sub(repo_width).max(15);
+
+    let mut lines = Vec::new();
+    lines.push(
+        Line::from(separator_line(
+            "All PRs sorted by Lead Time (longest first)",
+            usable_width,
+        ))
+        .style(Style::default().fg(Color::Gray)),
+    );
+
+    for pr in &all_prs {
+        let pr_size = pr.size(&config.size);
+        let size_color = match pr_size {
+            PRSize::S => Color::Green,
+            PRSize::M => Color::Blue,
+            PRSize::L => Color::Yellow,
+            PRSize::XL => Color::Red,
+        };
+
+        lines.push(Line::from(vec![
+            Span::styled(
+                format_date_short(pr.created_at),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::raw(" │ "),
+            Span::styled(
+                format!(
+                    "{:repo_w$}",
+                    truncate(&pr.repo, repo_width),
+                    repo_w = repo_width
+                ),
+                Style::default().fg(Color::Blue),
+            ),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("#{:4}", pr.number),
+                Style::default().fg(Color::DarkGray),
+            ),
+            Span::raw(" "),
+            Span::raw(format!(
+                "{:title_w$}",
+                truncate(&pr.title, title_width),
+                title_w = title_width
+            )),
+            Span::raw(" │ "),
+            Span::styled(
+                format!("{:8}", format_duration(pr.lead_time)),
+                Style::default().fg(Color::Yellow),
+            ),
+            Span::raw(" │ "),
+            Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
+        ]));
+    }
+
+    lines
+}
+
+fn separator_line(title: &str, width: usize) -> String {
+    let prefix = format!("━━━ {} ", title);
+    let remaining = width.saturating_sub(prefix.chars().count()).max(0);
+    format!("{}{}", prefix, "━".repeat(remaining))
+}
+
+fn pad_line(text: &str, width: usize, pad_char: char) -> String {
+    let text_len = text.chars().count();
+    if text_len >= width {
+        text.to_string()
+    } else {
+        format!("{}{}", text, pad_char.to_string().repeat(width - text_len))
+    }
 }
 
 fn format_duration(d: Duration) -> String {
@@ -519,16 +520,24 @@ fn format_frequency(freq: f64) -> String {
     format!("{:.1}/week", freq)
 }
 
-fn format_date_range(start: DateTime<Utc>, end: DateTime<Utc>) -> String {
+fn format_date_range_short(start: DateTime<Utc>, end: DateTime<Utc>) -> String {
     format!(
-        "{}/{} - {}/{}",
-        start.month(),
+        "{} {:02} - {} {:02}",
+        start.format("%b"),
         start.day(),
-        end.month(),
+        end.format("%b"),
         end.day()
     )
 }
 
-fn format_date(dt: DateTime<Utc>) -> String {
-    dt.format("%Y-%m-%d").to_string()
+fn format_date_short(dt: DateTime<Utc>) -> String {
+    dt.format("%b %d").to_string()
+}
+
+fn truncate(s: &str, max_len: usize) -> String {
+    if s.len() <= max_len {
+        format!("{:width$}", s, width = max_len)
+    } else {
+        format!("{:width$}", &s[..max_len], width = max_len)
+    }
 }

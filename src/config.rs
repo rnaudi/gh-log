@@ -73,9 +73,6 @@ impl Default for SizeConfig {
 }
 
 impl Config {
-    /// Loads configuration from standard config directory
-    ///
-    /// Returns default config if file doesn't exist
     pub fn load() -> Result<Self> {
         let config_path = get_config_file_path()?;
         if !config_path.exists() {
@@ -102,10 +99,6 @@ impl Config {
         self.matches_patterns(title, &self.filter.ignore_patterns)
     }
 
-    /// Checks if text matches any pattern in the list.
-    ///
-    /// Note: Regex is compiled on each call. For typical config sizes (< 10 patterns),
-    /// this is simpler than caching and has negligible performance impact.
     fn matches_patterns(&self, text: &str, patterns: &[String]) -> bool {
         patterns.iter().any(|pattern| {
             Regex::new(pattern)
