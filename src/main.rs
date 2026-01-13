@@ -67,6 +67,9 @@ enum Commands {
     /// Show or create configuration file
     #[command(name = "config")]
     Config,
+    /// Check system requirements and show diagnostics
+    #[command(name = "doctor")]
+    Doctor,
 }
 
 fn parser_month(s: &str) -> anyhow::Result<String> {
@@ -75,6 +78,19 @@ fn parser_month(s: &str) -> anyhow::Result<String> {
         Ok(s.to_string())
     } else {
         bail!("Month must be in format YYYY-MM, e.g. 2025-11")
+    }
+}
+
+fn check_gh_installed() -> anyhow::Result<()> {
+    match Command::new("gh").arg("--version").output() {
+        Ok(output) if output.status.success() => Ok(()),
+        Ok(_) => bail!(
+            "GitHub CLI (gh) is installed but not working correctly.\nRun 'gh auth login' to authenticate."
+        ),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
+            bail!("GitHub CLI (gh) is not installed.\nInstall it from: https://cli.github.com/")
+        }
+        Err(e) => bail!("Failed to check for GitHub CLI: {}", e),
     }
 }
 
@@ -120,6 +136,8 @@ struct GraphQLPullRequest {
 }
 
 fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
+    check_gh_installed()?;
+
     let mut all_prs = Vec::new();
     let mut has_next_page = true;
     let mut cursor: Option<String> = None;
@@ -200,6 +218,8 @@ fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
 }
 
 fn fetch_reviewed_prs(month: &str) -> anyhow::Result<usize> {
+    check_gh_installed()?;
+
     let mut total_count = 0;
     let mut has_next_page = true;
     let mut cursor: Option<String> = None;
@@ -619,6 +639,74 @@ fn main() -> anyhow::Result<()> {
                 OutputFormat::Raw
             };
             run_print_mode(&month, force, format)
+        }
+        Commands::Doctor => {
+            println!("gh-log diagnostics\n");
+            match Command::new("gh").arg("--version").output() {
+                Ok(output) if output.status.success() => {
+                    let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+                    println!("✓ GitHub CLI: {}", version);
+                }
+                Ok(_) => {
+                    println!("✗ GitHub CLI: installed but not authenticated");
+                    println!("  Run: gh auth login");
+                }
+                Err(_) => {
+                    println!("✗ GitHub CLI: not installed");
+                    println!("  Install from: https://cli.github.com/");
+                }
+            }
+
+            match directories::ProjectDirs::from("", "", "gh-log") {
+                Some(dirs) => {
+                    let cache_dir = dirs.cache_dir();
+                    let config_dir = dirs.config_dir();
+                    let config_path = config_dir.join("config.toml");
+                    println!("\nCache directory: {}", cache_dir.display());
+
+                    if cache_dir.exists() {
+                        if let Ok(entries) = std::fs::read_dir(cache_dir) {
+                            let mut cache_files: Vec<_> = entries
+                                .filter_map(|e| e.ok())
+                                .filter(|e| e.path().extension().is_some_and(|ext| ext == "json"))
+                                .collect();
+
+                            if cache_files.is_empty() {
+                                println!("  (no cache files)");
+                            } else {
+                                cache_files.sort_by_key(|e| e.path());
+                                for entry in cache_files {
+                                    if let Ok(metadata) = entry.metadata()
+                                        && let Ok(modified) = metadata.modified()
+                                    {
+                                        let datetime: chrono::DateTime<chrono::Utc> =
+                                            modified.into();
+                                        println!(
+                                            "  {} ({})",
+                                            entry.file_name().to_string_lossy(),
+                                            datetime.format("%Y-%m-%d %H:%M:%S UTC")
+                                        );
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        println!("  (directory does not exist yet)");
+                    }
+
+                    println!("\nConfiguration file: {}", config_path.display());
+                    if config_path.exists() {
+                        println!("  (exists)");
+                    } else {
+                        println!("  (not created yet, using defaults)");
+                    }
+                }
+                None => {
+                    println!("\n✗ Could not determine cache/config directories");
+                }
+            }
+
+            Ok(())
         }
         Commands::Config => {
             match directories::ProjectDirs::from("", "", "gh-log") {

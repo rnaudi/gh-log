@@ -10,6 +10,7 @@ Commands:
   view    Open interactive TUI to view PRs
   print   Print PRs to terminal
   config  Show or create configuration file
+  doctor  Check system requirements and show diagnostics
   help    Print this message or the help of the given subcommand(s)
 
 Options:
