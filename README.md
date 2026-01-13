@@ -60,6 +60,10 @@ This pulls the data in seconds. Export to JSON, feed it to Claude or ChatGPT, an
 I keep a private personal repository where I open PRs with prefixes like "docs:", "review:", "meeting:". PRs become the source of truth for most of my work, and the only cost is opening and merging a PR with a descriptive title that an LLM can interpret.
    
 
+## Prerequisites
+
+Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authenticated.
+
 ## Installation
 
 ### Homebrew
@@ -123,6 +127,35 @@ created_at,repo,number,title,lead_time_hours,size,additions,deletions,changed_fi
 2025-01-18T16:45:00Z,acme/auth,9016,Fix token refresh,0.42,S,56,34,4
 2025-01-18T18:20:00Z,acme/api-gateway,1243,Improve error messages,0.30,S,67,45,5
 ~~~
+
+### Doctor Command
+Check system requirements and diagnostics:
+
+~~~bash
+gh-log doctor
+~~~
+
+Output:
+~~~bash
+gh-log diagnostics
+
+✓ GitHub CLI: gh version 2.83.2 (2025-12-10)
+https://github.com/cli/cli/releases/tag/v2.83.2
+
+Cache directory: /Users/user/Library/Caches/gh-log
+  2025-01.json (2026-01-12 13:22:08 UTC)
+  2025-11.json (2026-01-12 16:59:35 UTC)
+  2025-12.json (2026-01-12 16:59:16 UTC)
+  2026-01.json (2026-01-12 16:42:19 UTC)
+
+Configuration file: /Users/user/Library/Application Support/gh-log/config.toml
+  (exists)
+~~~
+
+Shows:
+- GitHub CLI installation status
+- Cache directory location and files
+- Configuration file location
 
 ### Caching
 
