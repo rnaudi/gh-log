@@ -2,54 +2,8 @@
 
 GitHub PR analytics for your terminal.
 
-~~~
-┌─ GitHub PRs for 2025-01 ──────────────────────────────────────────┐
-│ Total PRs: 34 │ Avg Lead Time: 35m │ Frequency: 8.5/week          │
-│ Sizes: [26S 3M 4L 1XL] │ Review Balance: 1.3:1 (45 reviewed)      │
-└────────────────────────────────────────────────────────────────────┘
+<img width="1548" height="2086" alt="carbon" src="https://github.com/user-attachments/assets/de17a0ea-c096-470e-8f23-692d99eecb2e" />
 
-━━━ Week 1 (Jan 05 - Jan 11) │ 8 PRs │ Avg: 25m ━━━━━━━━━━━━━━━━━━━
-
-  Jan 06 │ acme/api-gateway   │ #1234 Add OAuth support          │ 15m │ S
-  Jan 07 │ acme/user-service  │ #5678 Fix rate limiting bug      │ 45m │ M
-  Jan 08 │ acme/auth          │ #9012 Refactor user service      │ 12m │ S
-  Jan 09 │ acme/api-gateway   │ #1235 Update dependencies        │  8m │ S
-  Jan 10 │ acme/api-gateway   │ #1236 Add metrics endpoint       │ 18m │ S
-  Jan 11 │ acme/user-service  │ #5679 Improve error handling     │ 32m │ S
-  Jan 11 │ acme/auth          │ #9013 Add 2FA support            │ 1h  │ L
-  Jan 11 │ acme/api-gateway   │ #1237 Fix memory leak            │ 22m │ S
-
-━━━ Week 2 (Jan 12 - Jan 18) │ 12 PRs │ Avg: 38m ━━━━━━━━━━━━━━━━━━
-
-  Jan 13 │ acme/api-gateway   │ #1238 Optimize database queries  │ 28m │ S
-  Jan 13 │ acme/auth          │ #9014 Add session management     │ 55m │ M
-  Jan 14 │ acme/user-service  │ #5680 Add user profile API       │ 1h  │ L
-  Jan 15 │ acme/api-gateway   │ #1239 Update API docs            │ 10m │ S
-  Jan 16 │ acme/api-gateway   │ #1240 Add rate limit headers     │ 15m │ S
-  Jan 17 │ acme/user-service  │ #5681 Fix validation bug         │ 42m │ S
-  Jan 17 │ acme/auth          │ #9015 Refactor auth middleware   │ 35m │ S
-  Jan 18 │ acme/api-gateway   │ #1241 Add health check endpoint  │ 12m │ S
-  Jan 18 │ acme/api-gateway   │ #1242 Update logging             │  8m │ S
-  Jan 18 │ acme/user-service  │ #5682 Add pagination support     │ 48m │ M
-  Jan 18 │ acme/auth          │ #9016 Fix token refresh          │ 25m │ S
-  Jan 18 │ acme/api-gateway   │ #1243 Improve error messages     │ 18m │ S
-
-━━━ Week 3 (Jan 19 - Jan 25) │ 9 PRs │ Avg: 42m ━━━━━━━━━━━━━━━━━━━
-
-  Jan 20 │ acme/user-service  │ #5683 Add search functionality   │ 1h  │ L
-  Jan 21 │ acme/api-gateway   │ #1244 Fix CORS configuration     │ 38m │ S
-  Jan 22 │ acme/auth          │ #9017 Add password reset         │ 52m │ M
-  Jan 23 │ acme/api-gateway   │ #1245 Refactor request handlers  │ 35m │ S
-  Jan 24 │ acme/user-service  │ #5684 Fix user deletion bug      │ 28m │ S
-  Jan 25 │ acme/api-gateway   │ #1246 Add request validation     │ 45m │ S
-  Jan 25 │ acme/auth          │ #9018 Update security headers    │ 18m │ S
-  Jan 25 │ acme/api-gateway   │ #1247 Improve cache strategy     │ 1h  │ L
-  Jan 25 │ acme/user-service  │ #5685 Add email verification     │ 38m │ S
-
-┌─ Controls ────────────────────────────────────────────────────────┐
-│ s: Summary │ d: Details │ t: Tail │ ↑↓/jk: Scroll │ q: Quit       │
-└────────────────────────────────────────────────────────────────────┘
-~~~
 
 ## Why?
 
