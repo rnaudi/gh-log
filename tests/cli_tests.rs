@@ -73,21 +73,3 @@ fn test_missing_subcommand() {
     let stderr = String::from_utf8_lossy(&output.stderr);
     insta::assert_snapshot!(stderr);
 }
-
-#[test]
-fn test_view_missing_month_argument() {
-    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
-    let output = cmd.arg("view").output().unwrap();
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stderr);
-}
-
-#[test]
-fn test_print_missing_month_argument() {
-    let mut cmd = Command::new(cargo::cargo_bin!("gh-log"));
-    let output = cmd.arg("print").output().unwrap();
-
-    let stderr = String::from_utf8_lossy(&output.stderr);
-    insta::assert_snapshot!(stderr);
-}

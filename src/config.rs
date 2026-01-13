@@ -14,36 +14,22 @@ pub struct Config {
     pub size: SizeConfig,
 }
 
-/// Filter configuration
-///
-/// - `exclude_*`: Filtered out completely (not shown)
-/// - `ignore_*`: Shown but not counted in metrics
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct FilterConfig {
-    /// Repositories excluded (not shown)
     #[serde(default)]
     pub exclude_repos: Vec<String>,
-    /// PR title patterns excluded (not shown, regex)
     #[serde(default)]
     pub exclude_patterns: Vec<String>,
-    /// Repositories ignored (shown but not in metrics)
     #[serde(default)]
     pub ignore_repos: Vec<String>,
-    /// PR title patterns ignored (shown but not in metrics, regex)
     #[serde(default)]
     pub ignore_patterns: Vec<String>,
 }
 
-/// PR size thresholds (lines changed)
-///
-/// File count overrides: >=25 files = XL, >=15 files = at least L
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct SizeConfig {
-    /// S: <= small lines
     pub small: u32,
-    /// M: small+1 to medium lines
     pub medium: u32,
-    /// L: medium+1 to large lines, XL: > large
     pub large: u32,
 }
 
@@ -147,7 +133,6 @@ impl Config {
     }
 }
 
-/// Returns config file path
 fn get_config_file_path() -> Result<PathBuf> {
     let project_dirs =
         ProjectDirs::from("", "", "gh-log").context("Failed to determine config directory")?;

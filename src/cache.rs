@@ -7,7 +7,6 @@ use std::path::PathBuf;
 
 use crate::input::PullRequest;
 
-/// Cached data for a specific month.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CachedData {
     pub month: String,
