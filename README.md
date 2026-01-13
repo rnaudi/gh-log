@@ -66,13 +66,22 @@ Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authen
 
 ## Installation
 
-### Homebrew
+### macOS
 ```bash
 brew install rnaudi/tap/gh-log
+gh-log --version
 ```
 
-### Releases
-See [Releases](https://github.com/rnaudi/gh-log/releases)
+Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-aarch64-apple-darwin.tar.gz)
+
+### Linux / Unix
+```bash
+curl -L https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz | tar xz
+chmod +x gh-log
+./gh-log --version
+```
+
+Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz)
 
 ## Usage
 
