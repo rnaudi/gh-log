@@ -49,6 +49,11 @@ Extract and run:
 gh-log.exe --version
 ```
 
+### Docker
+```bash
+docker run --rm ghcr.io/rnaudi/gh-log --help
+```
+
 ## First Run
 
 ```bash
