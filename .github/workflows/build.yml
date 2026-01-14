@@ -18,7 +18,13 @@ jobs:
     needs: ci
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            binary: gh-log
+          - os: macos-latest
+            binary: gh-log
+          - os: windows-latest
+            binary: gh-log.exe
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
@@ -30,5 +36,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: gh-log-${{ matrix.os }}
-          path: target/release/gh-log
+          path: target/release/${{ matrix.binary }}
           retention-days: 30
