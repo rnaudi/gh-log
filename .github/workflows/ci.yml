@@ -56,3 +56,17 @@ jobs:
           cache-to: type=gha,mode=max
       - name: Test --version
         run: docker run --rm gh-log:test --version
+
+  nix-flake:
+    name: Nix Flake
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: DeterminateSystems/nix-installer-action@v13
+      - uses: DeterminateSystems/magic-nix-cache-action@v7
+      - name: Check flake
+        run: nix flake check
+      - name: Build package
+        run: nix build
+      - name: Test running
+        run: nix run . -- --version
