@@ -5,6 +5,14 @@ WORKDIR /app
 RUN apk add --no-cache musl-dev
 
 COPY Cargo.toml Cargo.lock ./
+
+# Build dependencies only (cached layer)
+RUN mkdir src && \
+    echo "fn main() {}" > src/main.rs && \
+    cargo build --release && \
+    rm -rf src target/release/gh-log*
+
+# Build actual application
 COPY . .
 
 RUN cargo build --release --locked
