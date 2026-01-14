@@ -25,6 +25,7 @@ Requires [GitHub CLI](https://cli.github.com/) (`gh`) to be installed and authen
 
 ## Installation
 
+
 ### macOS
 ```bash
 brew install rnaudi/tap/gh-log
@@ -52,6 +53,16 @@ gh-log.exe --version
 ### Docker
 ```bash
 docker run --rm ghcr.io/rnaudi/gh-log --help
+```
+
+### Nix
+```bash
+nix profile install github:rnaudi/gh-log
+```
+
+Or try without installing:
+```bash
+nix run github:rnaudi/gh-log
 ```
 
 ## First Run
