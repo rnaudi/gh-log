@@ -1,0 +1,5 @@
+---
+source: src/config.rs
+expression: result.unwrap_err().to_string()
+---
+Invalid ignore_pattern: '***broken'
