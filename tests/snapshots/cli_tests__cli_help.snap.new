@@ -1,5 +1,6 @@
 ---
 source: tests/cli_tests.rs
+assertion_line: 10
 expression: stdout
 ---
 Pull your GitHub PR data in seconds. View interactively or export to JSON/CSV.

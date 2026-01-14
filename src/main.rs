@@ -16,9 +16,109 @@ use serde::Deserialize;
 use std::io::stdout;
 use std::process::Command;
 
+// Helper functions for CLI help text
+fn view_help() -> &'static str {
+    "Navigate PRs with an interactive terminal UI.
+
+VIEWS:
+  s - Summary (weekly & repo stats)
+  d - Detail (cycle: by week ↔ by repo)
+  t - Tail (all PRs sorted by lead time)
+
+NAVIGATION:
+  ↑↓ or j/k - Scroll up/down
+  q or Esc  - Quit"
+}
+
+fn print_help() -> &'static str {
+    "Output PR data to terminal or pipe to other tools.
+
+FORMATS:
+  (default) - Human-readable with PR descriptions
+  --json    - JSON format (great for LLMs/scripts)
+  --csv     - CSV format (import to spreadsheet)
+
+EXAMPLES:
+  gh-log print | pbcopy
+  gh-log print --json | claude 'summarize'
+  gh-log print --csv > prs-2025-01.csv"
+}
+
+fn config_help() -> &'static str {
+    "Create/edit configuration file to customize filtering and PR size thresholds.
+
+LOCATION:
+  macOS:   ~/Library/Application Support/gh-log/config.toml
+  Linux:   ~/.config/gh-log/config.toml
+  Windows: %APPDATA%\\gh-log\\config.toml
+
+CONFIGURATION OPTIONS:
+
+[filter]
+  exclude_repos    - Hide repos completely (not shown anywhere)
+  exclude_patterns - Hide PRs matching regex (e.g., \"^test:\", \"^wip:\")
+  ignore_repos     - Show but don't count in metrics
+  ignore_patterns  - Show but don't count in metrics (e.g., \"^docs:\", \"^meeting:\")
+
+[size]
+  small  - Max lines for S size (default: 50)
+  medium - Max lines for M size (default: 200)
+  large  - Max lines for L size (default: 500)
+  (XL = anything above large threshold)
+
+PATTERN SYNTAX:
+  Uses regex syntax. Common patterns:
+    ^prefix:        - Matches PR titles starting with \"prefix:\"
+    (?i)keyword     - Case-insensitive match
+    (foo|bar)       - Match either foo or bar
+    
+EXAMPLE CONFIG:
+  [filter]
+  exclude_repos = [\"username/spam-repo\"]
+  exclude_patterns = [\"^test:\", \"^tmp:\", \"^wip:\"]
+  ignore_repos = [\"username/personal-notes\"]
+  ignore_patterns = [\"^docs:\", \"^meeting:\", \"^review:\"]
+  
+  [size]
+  small = 50
+  medium = 200
+  large = 500
+
+NOTES:
+  - If a repo is both excluded and ignored, it gets excluded
+  - Patterns are applied to PR titles
+  - Size = additions + deletions + file count heuristic"
+}
+
+fn doctor_help() -> &'static str {
+    "Verify system setup and show diagnostic information.
+
+CHECKS:
+  - GitHub CLI (gh) installation and version
+  - Authentication status
+  
+DISPLAYS:
+  - Cache directory location and contents
+  - Configuration file location and status
+
+PATHS:
+  Cache:
+    macOS:   ~/Library/Caches/gh-log/
+    Linux:   ~/.cache/gh-log/
+    Windows: %LOCALAPPDATA%\\gh-log\\cache\\
+    
+  Config:
+    macOS:   ~/Library/Application Support/gh-log/config.toml
+    Linux:   ~/.config/gh-log/config.toml
+    Windows: %APPDATA%\\gh-log\\config.toml"
+}
+
 #[derive(Parser)]
 #[command(name = "gh-log")]
-#[command(about = "View your GitHub PRs summary", long_about = None)]
+#[command(about = "GitHub PR analytics for your terminal")]
+#[command(
+    long_about = "Pull your GitHub PR data in seconds. View interactively or export to JSON/CSV.\n\nRequires: GitHub CLI (gh) installed and authenticated\nCaching: Speeds up repeated queries. Current month cached 6h, last month 24h, older months permanent.\n         Use --force flag to refresh cached data.\n\nExamples:\n  gh-log view                    # Interactive TUI for current month\n  gh-log print --json | claude   # Feed to LLM for performance review\n  gh-log doctor                  # Check setup"
+)]
 #[command(version)]
 struct Cli {
     #[command(subcommand)]
@@ -34,7 +134,8 @@ enum OutputFormat {
 
 #[derive(Subcommand)]
 enum Commands {
-    /// Open interactive TUI to view PRs
+    /// Interactive TUI - press 's' summary, 'd' detail (cycles by week/repo), 't' tail, 'q' quit
+    #[command(long_about = view_help())]
     #[command(override_usage = "gh-log view [OPTIONS]")]
     View {
         #[arg(
@@ -47,7 +148,8 @@ enum Commands {
         #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
         force: bool,
     },
-    /// Print PRs to terminal
+    /// Print PRs as text/json/csv - pipe to LLMs, clipboard, or files
+    #[command(long_about = print_help())]
     #[command(override_usage = "gh-log print [OPTIONS]")]
     Print {
         #[arg(
@@ -64,10 +166,12 @@ enum Commands {
         #[arg(long, help = "Output data in CSV format")]
         csv: bool,
     },
-    /// Show or create configuration file
+    /// Create/edit config - exclude/ignore repos, customize PR size thresholds
+    #[command(long_about = config_help())]
     #[command(name = "config")]
     Config,
-    /// Check system requirements and show diagnostics
+    /// Verify GitHub CLI (gh) is installed and show cache/config paths
+    #[command(long_about = doctor_help())]
     #[command(name = "doctor")]
     Doctor,
 }
