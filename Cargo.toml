@@ -12,7 +12,6 @@ crossterm = "0.28"
 clap = { version = "4.5.54", features = ["derive"] }
 regex = "1.12.2"
 anyhow = "1.0.100"
-insta = "1.46.0"
 directories = "5.0"
 toml = "0.8"
 
@@ -20,3 +19,9 @@ toml = "0.8"
 assert_cmd = "2.0"
 predicates = "3.1"
 proptest = "1.9"
+insta = "1.46.0"
+
+[profile.release]
+strip = true       # Strip symbols for smaller binaries
+lto = "thin"       # Link-time optimization (faster compile than "fat", still optimizes)
+codegen-units = 1  # Better optimization at cost of compile time
