@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::path::PathBuf;
 
-use crate::input::PullRequest;
+use crate::github::PullRequest;
 
 const MAX_SIZE: usize = 10_000;
 
@@ -110,7 +110,7 @@ mod tests {
     use tempfile::TempDir;
 
     fn create_test_pr() -> PullRequest {
-        use crate::input::{Repository, Reviews};
+        use crate::github::{Repository, Reviews};
         use chrono::TimeZone;
         let fixed_time = Utc.with_ymd_and_hms(2025, 1, 15, 10, 0, 0).unwrap();
         PullRequest {

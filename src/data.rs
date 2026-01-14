@@ -181,7 +181,7 @@ struct PRData {
 }
 
 pub fn process_prs(
-    prs: Vec<crate::input::PullRequest>,
+    prs: Vec<crate::github::PullRequest>,
     reviewed_count: usize,
     config: &Config,
 ) -> MonthData {

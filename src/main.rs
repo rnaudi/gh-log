@@ -2,7 +2,6 @@ mod cache;
 mod config;
 mod data;
 mod github;
-mod input;
 mod view;
 
 use anyhow::bail;
@@ -13,7 +12,6 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::{Terminal, backend::CrosstermBackend};
-use serde::Deserialize;
 use std::io::stdout;
 use std::process::Command;
 
@@ -186,205 +184,10 @@ fn parser_month(s: &str) -> anyhow::Result<String> {
     }
 }
 
-fn check_gh_installed() -> anyhow::Result<()> {
-    match Command::new("gh").arg("--version").output() {
-        Ok(output) if output.status.success() => Ok(()),
-        Ok(_) => bail!(
-            "GitHub CLI (gh) is installed but not working correctly.\nRun 'gh auth login' to authenticate."
-        ),
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            bail!("GitHub CLI (gh) is not installed.\nInstall it from: https://cli.github.com/")
-        }
-        Err(e) => bail!("Failed to check for GitHub CLI: {}", e),
-    }
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLResponse {
-    data: GraphQLData,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLData {
-    search: SearchResults,
-}
-
-#[derive(Debug, Deserialize)]
-struct SearchResults {
-    nodes: Vec<GraphQLPullRequest>,
-    #[serde(rename = "pageInfo")]
-    page_info: PageInfo,
-}
-
-#[derive(Debug, Deserialize)]
-struct PageInfo {
-    #[serde(rename = "hasNextPage")]
-    has_next_page: bool,
-    #[serde(rename = "endCursor")]
-    end_cursor: Option<String>,
-}
-
-#[derive(Debug, Deserialize)]
-struct GraphQLPullRequest {
-    number: u32,
-    title: String,
-    body: Option<String>,
-    repository: input::Repository,
-    #[serde(rename = "createdAt")]
-    created_at: chrono::DateTime<chrono::Utc>,
-    #[serde(rename = "updatedAt")]
-    updated_at: chrono::DateTime<chrono::Utc>,
-    additions: u32,
-    deletions: u32,
-    #[serde(rename = "changedFiles")]
-    changed_files: u32,
-    reviews: input::Reviews,
-}
-
-fn fetch_prs(month: &str) -> anyhow::Result<Vec<input::PullRequest>> {
-    check_gh_installed()?;
-
-    let mut all_prs = Vec::new();
-    let mut has_next_page = true;
-    let mut cursor: Option<String> = None;
-
-    while has_next_page {
-        let after_clause = cursor
-            .as_ref()
-            .map(|c| format!(r#", after: "{}""#, c))
-            .unwrap_or_default();
-
-        let query = format!(
-            r#"{{
-  search(query: "is:pr author:@me created:{}", type: ISSUE, first: 100{}) {{
-    pageInfo {{
-      hasNextPage
-      endCursor
-    }}
-    nodes {{
-      ... on PullRequest {{
-        number
-        title
-        body
-        repository {{
-          nameWithOwner
-        }}
-        createdAt
-        updatedAt
-        additions
-        deletions
-        changedFiles
-        reviews(first: 10) {{
-          nodes {{
-            author {{
-              login
-            }}
-          }}
-        }}
-      }}
-    }}
-  }}
-}}"#,
-            month, after_clause
-        );
-
-        let output = Command::new("gh")
-            .arg("api")
-            .arg("graphql")
-            .arg("-f")
-            .arg(format!("query={}", query))
-            .output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("GraphQL query failed: {}", stderr);
-        }
-
-        let json_str = String::from_utf8_lossy(&output.stdout);
-        let response: GraphQLResponse = serde_json::from_str(&json_str)?;
-
-        for pr in response.data.search.nodes {
-            all_prs.push(input::PullRequest {
-                number: pr.number,
-                title: pr.title,
-                body: pr.body,
-                repository: pr.repository,
-                created_at: pr.created_at,
-                updated_at: pr.updated_at,
-                additions: pr.additions,
-                deletions: pr.deletions,
-                changed_files: pr.changed_files,
-                reviews: pr.reviews,
-            });
-        }
-
-        has_next_page = response.data.search.page_info.has_next_page;
-        cursor = response.data.search.page_info.end_cursor;
-    }
-
-    Ok(all_prs)
-}
-
-fn fetch_reviewed_prs(month: &str) -> anyhow::Result<usize> {
-    check_gh_installed()?;
-
-    let mut total_count = 0;
-    let mut has_next_page = true;
-    let mut cursor: Option<String> = None;
-
-    while has_next_page {
-        let after_clause = cursor
-            .as_ref()
-            .map(|c| format!(r#", after: "{}""#, c))
-            .unwrap_or_default();
-
-        let query = format!(
-            r#"{{
-  search(query: "is:pr reviewed-by:@me created:{}", type: ISSUE, first: 100{}) {{
-    pageInfo {{
-      hasNextPage
-      endCursor
-    }}
-    issueCount
-  }}
-}}"#,
-            month, after_clause
-        );
-
-        let output = Command::new("gh")
-            .arg("api")
-            .arg("graphql")
-            .arg("-f")
-            .arg(format!("query={}", query))
-            .output()?;
-
-        if !output.status.success() {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            bail!("GraphQL query failed: {}", stderr);
-        }
-
-        let json_str = String::from_utf8_lossy(&output.stdout);
-        let response: serde_json::Value = serde_json::from_str(&json_str)?;
-
-        if let Some(issue_count) = response["data"]["search"]["issueCount"].as_u64() {
-            total_count = issue_count as usize;
-        }
-
-        has_next_page = response["data"]["search"]["pageInfo"]["hasNextPage"]
-            .as_bool()
-            .unwrap_or(false);
-        cursor = response["data"]["search"]["pageInfo"]["endCursor"]
-            .as_str()
-            .map(|s| s.to_string());
-    }
-
-    Ok(total_count)
-}
-
 fn get_data_with_cache(
     month: &str,
     use_cache: bool,
-) -> anyhow::Result<(Vec<input::PullRequest>, usize)> {
+) -> anyhow::Result<(Vec<github::PullRequest>, usize)> {
     let cache = cache::Cache::default()?;
     if use_cache && let Some(cached) = cache.load_from_cache(month)? {
         eprintln!("Loading from cache...");
@@ -392,8 +195,9 @@ fn get_data_with_cache(
     }
 
     eprintln!("Fetching data from GitHub...");
-    let prs = fetch_prs(month)?;
-    let reviewed_count = fetch_reviewed_prs(month)?;
+    let client = github::CommandClient::new()?;
+    let prs = client.fetch_prs(month)?;
+    let reviewed_count = client.fetch_reviewed_prs(month)?;
 
     let cached_data = cache::CachedData {
         month: month.to_string(),
