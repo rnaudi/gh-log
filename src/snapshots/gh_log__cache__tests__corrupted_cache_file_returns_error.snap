@@ -1,0 +1,5 @@
+---
+source: src/cache.rs
+expression: result.unwrap_err()
+---
+Failed to parse cache file for 2025-01
