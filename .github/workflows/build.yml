@@ -38,3 +38,14 @@ jobs:
           name: gh-log-${{ matrix.os }}
           path: target/release/${{ matrix.binary }}
           retention-days: 30
+
+  docker:
+    name: Build Docker Image
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Build Docker image
+        run: docker build -t gh-log:test .
+      - name: Test Docker image
+        run: docker run --rm gh-log:test --version
