@@ -71,14 +71,14 @@ PATTERN SYNTAX:
     ^prefix:        - Matches PR titles starting with \"prefix:\"
     (?i)keyword     - Case-insensitive match
     (foo|bar)       - Match either foo or bar
-    
+
 EXAMPLE CONFIG:
   [filter]
   exclude_repos = [\"username/spam-repo\"]
   exclude_patterns = [\"^test:\", \"^tmp:\", \"^wip:\"]
   ignore_repos = [\"username/personal-notes\"]
   ignore_patterns = [\"^docs:\", \"^meeting:\", \"^review:\"]
-  
+
   [size]
   small = 50
   medium = 200
@@ -96,7 +96,7 @@ fn doctor_help() -> &'static str {
 CHECKS:
   - GitHub CLI (gh) installation and version
   - Authentication status
-  
+
 DISPLAYS:
   - Cache directory location and contents
   - Configuration file location and status
@@ -106,7 +106,7 @@ PATHS:
     macOS:   ~/Library/Caches/gh-log/
     Linux:   ~/.cache/gh-log/
     Windows: %LOCALAPPDATA%\\gh-log\\cache\\
-    
+
   Config:
     macOS:   ~/Library/Application Support/gh-log/config.toml
     Linux:   ~/.config/gh-log/config.toml
@@ -407,7 +407,7 @@ fn get_data_with_cache(
 fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let config = config::Config::load()?;
+    let config = config::Config::default()?;
     let data = data::process_prs(prs, reviewed_count, &config);
 
     enable_raw_mode()?;
@@ -468,7 +468,7 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
 fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let config = config::Config::load()?;
+    let config = config::Config::default()?;
     let data = data::process_prs(prs, reviewed_count, &config);
 
     match format {
@@ -832,12 +832,12 @@ fn main() -> anyhow::Result<()> {
                 Some(dirs) => {
                     let config_path = dirs.config_dir().join("config.toml");
                     if config_path.exists() {
-                        let config = config::Config::load()?;
+                        let config = config::Config::default()?;
                         println!("{}", toml::to_string_pretty(&config)?);
                         eprintln!("\n# {}", config_path.display());
                     } else {
-                        let path = config::Config::create_example()?;
-                        println!("Created config: {}", path.display());
+                        config::create_example(&config_path)?;
+                        println!("Created config: {}", config_path.display());
                     }
                 }
                 None => {
@@ -922,7 +922,7 @@ mod tests {
     #[test]
     fn test_print_json_output() {
         let data = create_test_month_data();
-        let config = config::Config::default();
+        let config = config::Config::default().unwrap();
         let result = print_json(&data, &config);
         assert!(result.is_ok(), "JSON output should succeed");
     }
@@ -930,7 +930,7 @@ mod tests {
     #[test]
     fn test_print_csv_output() {
         let data = create_test_month_data();
-        let config = config::Config::default();
+        let config = config::Config::default().unwrap();
         let result = print_csv(&data, &config);
         assert!(result.is_ok(), "CSV output should succeed");
     }
