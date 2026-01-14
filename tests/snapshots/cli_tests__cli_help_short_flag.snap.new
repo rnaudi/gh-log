@@ -1,6 +1,7 @@
 ---
 source: tests/cli_tests.rs
-expression: stderr
+assertion_line: 19
+expression: stdout
 ---
 GitHub PR analytics for your terminal
 
