@@ -17,10 +17,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "fmt"
-          cache-on-failure: true
       - run: cargo fmt --all -- --check
 
   clippy:
@@ -31,11 +27,6 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - uses: Swatinem/rust-cache@v2
-        with:
-          shared-key: "clippy"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
-          cache-on-failure: true
       - run: cargo clippy --all-targets --all-features -- -D warnings
 
   test:
