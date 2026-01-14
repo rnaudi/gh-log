@@ -46,13 +46,32 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v6
-      - name: Download artifacts from build workflow
+      - name: Download Ubuntu binary
         uses: dawidd6/action-download-artifact@v6
         with:
           workflow: build.yml
           commit: ${{ github.sha }}
           workflow_conclusion: success
-          path: artifacts
+          name: gh-log-ubuntu-latest
+          path: artifacts/gh-log-ubuntu-latest
+      
+      - name: Download macOS binary
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: build.yml
+          commit: ${{ github.sha }}
+          workflow_conclusion: success
+          name: gh-log-macos-latest
+          path: artifacts/gh-log-macos-latest
+      
+      - name: Download Windows binary
+        uses: dawidd6/action-download-artifact@v6
+        with:
+          workflow: build.yml
+          commit: ${{ github.sha }}
+          workflow_conclusion: success
+          name: gh-log-windows-latest
+          path: artifacts/gh-log-windows-latest
 
       - name: Display structure of downloaded files
         run: ls -R artifacts
