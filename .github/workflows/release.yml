@@ -9,38 +9,8 @@ env:
   RUST_BACKTRACE: 1
 
 jobs:
-  ci:
-    name: CI
-    uses: ./.github/workflows/ci.yml
-
-  docker:
-    name: Retag and Push Docker Image
-    needs: ci
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract version
-        id: version
-        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
-      - name: Pull, retag and push
-        run: |
-          docker pull ghcr.io/rnaudi/gh-log:main
-          docker tag ghcr.io/rnaudi/gh-log:main ghcr.io/rnaudi/gh-log:${{ steps.version.outputs.version }}
-          docker tag ghcr.io/rnaudi/gh-log:main ghcr.io/rnaudi/gh-log:latest
-          docker push ghcr.io/rnaudi/gh-log:${{ steps.version.outputs.version }}
-          docker push ghcr.io/rnaudi/gh-log:latest
-
   release:
     name: Publish Release
-    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -54,7 +24,6 @@ jobs:
           workflow_conclusion: success
           name: gh-log-ubuntu-latest
           path: artifacts/gh-log-ubuntu-latest
-      
       - name: Download macOS binary
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -63,7 +32,6 @@ jobs:
           workflow_conclusion: success
           name: gh-log-macos-latest
           path: artifacts/gh-log-macos-latest
-      
       - name: Download Windows binary
         uses: dawidd6/action-download-artifact@v6
         with:
@@ -76,23 +44,36 @@ jobs:
       - name: Display structure of downloaded files
         run: ls -R artifacts
 
-      - name: Create archives
+      - name: Create archives and checksums
         run: |
+          # Linux
           cd artifacts/gh-log-ubuntu-latest
           tar czf ../../gh-log-x86_64-unknown-linux-gnu.tar.gz gh-log
-          cd ../gh-log-macos-latest
+          cd ../..
+          sha256sum gh-log-x86_64-unknown-linux-gnu.tar.gz > gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+          # macOS
+          cd artifacts/gh-log-macos-latest
           tar czf ../../gh-log-aarch64-apple-darwin.tar.gz gh-log
-          cd ../gh-log-windows-latest
+          cd ../..
+          shasum -a 256 gh-log-aarch64-apple-darwin.tar.gz > gh-log-aarch64-apple-darwin.tar.gz.sha256
+
+          # Windows
+          cd artifacts/gh-log-windows-latest
           zip ../../gh-log-x86_64-pc-windows-msvc.zip gh-log.exe
           cd ../..
+          sha256sum gh-log-x86_64-pc-windows-msvc.zip > gh-log-x86_64-pc-windows-msvc.zip.sha256
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           files: |
             gh-log-x86_64-unknown-linux-gnu.tar.gz
+            gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
             gh-log-aarch64-apple-darwin.tar.gz
+            gh-log-aarch64-apple-darwin.tar.gz.sha256
             gh-log-x86_64-pc-windows-msvc.zip
+            gh-log-x86_64-pc-windows-msvc.zip.sha256
           generate_release_notes: true
 
       - name: Update Homebrew tap

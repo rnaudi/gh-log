@@ -50,30 +50,29 @@ Extract and run:
 gh-log.exe --version
 ```
 
-### Docker
-```bash
-docker run --rm ghcr.io/rnaudi/gh-log --help
-```
+**Verify the download (optional but recommended):**
 
-### Nix
-```bash
-nix profile install github:rnaudi/gh-log
-```
-
-Or try without installing:
-```bash
-nix run github:rnaudi/gh-log
-```
-
-## First Run
+Example for linux:
 
 ```bash
-gh-log view
+# Download the binary and checksum
+curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz
+curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# Verify the checksum
+sha256sum -c gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
+
+# If OK, extract
+tar xzf gh-log-x86_64-unknown-linux-gnu.tar.gz
+./gh-log --version
 ```
-
-
 
 ## Common Use Cases
+
+**Interactive view:**
+```bash
+gh-log view  
+```
 
 **Performance reviews:**
 ```bash
