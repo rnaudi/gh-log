@@ -6,13 +6,6 @@ mod view;
 
 use anyhow::bail;
 use clap::{Parser, Subcommand};
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use crossterm::execute;
-use crossterm::terminal::{
-    EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
-};
-use ratatui::{Terminal, backend::CrosstermBackend};
-use std::io::stdout;
 use std::process::Command;
 
 // Helper functions for CLI help text
@@ -213,74 +206,22 @@ fn get_data_with_cache(
 fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let config = config::Config::default()?;
-    let data = data::process_prs(prs, reviewed_count, &config);
+    let cfg = config::Config::default()?;
+    let month_data = data::process_prs(prs, reviewed_count, &cfg);
 
-    enable_raw_mode()?;
-    execute!(stdout(), EnterAlternateScreen)?;
-
-    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
-
-    let mut current_view = view::View::Summary;
-    let mut scroll_state = view::ScrollState::new();
-
-    loop {
-        match current_view {
-            view::View::Summary => {
-                view::render_summary(&mut terminal, &data, &mut scroll_state, &config)?
-            }
-            view::View::Detail(mode) => {
-                view::render_detail(&mut terminal, &data, &mut scroll_state, &config, mode)?
-            }
-            view::View::Tail => {
-                view::render_tail(&mut terminal, &data, &mut scroll_state, &config)?
-            }
-        }
-
-        if event::poll(std::time::Duration::from_millis(100))?
-            && let Event::Key(key) = event::read()?
-            && key.kind == KeyEventKind::Press
-        {
-            match key.code {
-                KeyCode::Char('q') | KeyCode::Esc => break,
-                KeyCode::Char('s') => {
-                    current_view = view::View::Summary;
-                    scroll_state.reset();
-                }
-                KeyCode::Char('d') => {
-                    current_view = match current_view {
-                        view::View::Detail(mode) => view::View::Detail(mode.cycle()),
-                        _ => view::View::Detail(view::DetailMode::ByWeek),
-                    };
-                    scroll_state.reset();
-                }
-                KeyCode::Char('t') => {
-                    current_view = view::View::Tail;
-                    scroll_state.reset();
-                }
-                KeyCode::Up | KeyCode::Char('k') => scroll_state.scroll_up(),
-                KeyCode::Down | KeyCode::Char('j') => scroll_state.scroll_down(),
-                _ => {}
-            }
-        }
-    }
-
-    disable_raw_mode()?;
-    execute!(stdout(), LeaveAlternateScreen)?;
-
-    Ok(())
+    view::run(month_data, cfg)
 }
 
 fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
-    let config = config::Config::default()?;
-    let data = data::process_prs(prs, reviewed_count, &config);
+    let cfg = config::Config::default()?;
+    let data = data::process_prs(prs, reviewed_count, &cfg);
 
     match format {
-        OutputFormat::Raw => print_data(&data, month, &config),
-        OutputFormat::Json => print_json(&data, &config)?,
-        OutputFormat::Csv => print_csv(&data, &config)?,
+        OutputFormat::Raw => print_data(&data, month, &cfg),
+        OutputFormat::Json => print_json(&data, &cfg)?,
+        OutputFormat::Csv => print_csv(&data, &cfg)?,
     }
 
     Ok(())
