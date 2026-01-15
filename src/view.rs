@@ -2,12 +2,17 @@ use chrono::{DateTime, Datelike, Duration, Utc};
 use ratatui::{
     Frame, Terminal,
     backend::CrosstermBackend,
+    crossterm::{
+        event::{self, Event, KeyCode, KeyEventKind},
+        execute,
+        terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
+    },
     layout::{Constraint, Layout, Margin, Rect},
     style::{Color, Style, Stylize},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
-use std::io::Result;
+use std::io::{Result, stdout};
 
 use crate::config::Config;
 use crate::data::{MonthData, PRDetail, PRSize};
@@ -86,11 +91,62 @@ impl ScrollState {
     }
 }
 
-pub fn render_summary(
+pub fn run(month_data: MonthData, cfg: Config) -> anyhow::Result<()> {
+    enable_raw_mode()?;
+    execute!(stdout(), EnterAlternateScreen)?;
+
+    let mut terminal = Terminal::new(CrosstermBackend::new(stdout()))?;
+
+    let mut current_view = View::Summary;
+    let mut scroll_state = ScrollState::new();
+
+    loop {
+        match current_view {
+            View::Summary => render_summary(&mut terminal, &month_data, &mut scroll_state)?,
+            View::Detail(mode) => {
+                render_detail(&mut terminal, &month_data, &mut scroll_state, &cfg, mode)?
+            }
+            View::Tail => render_tail(&mut terminal, &month_data, &mut scroll_state, &cfg)?,
+        }
+
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()?
+            && key.kind == KeyEventKind::Press
+        {
+            match key.code {
+                KeyCode::Char('q') | KeyCode::Esc => break,
+                KeyCode::Char('s') => {
+                    current_view = View::Summary;
+                    scroll_state.reset();
+                }
+                KeyCode::Char('d') => {
+                    current_view = match current_view {
+                        View::Detail(mode) => View::Detail(mode.cycle()),
+                        _ => View::Detail(DetailMode::ByWeek),
+                    };
+                    scroll_state.reset();
+                }
+                KeyCode::Char('t') => {
+                    current_view = View::Tail;
+                    scroll_state.reset();
+                }
+                KeyCode::Up | KeyCode::Char('k') => scroll_state.scroll_up(),
+                KeyCode::Down | KeyCode::Char('j') => scroll_state.scroll_down(),
+                _ => {}
+            }
+        }
+    }
+
+    disable_raw_mode()?;
+    execute!(stdout(), LeaveAlternateScreen)?;
+
+    Ok(())
+}
+
+fn render_summary(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
     scroll_state: &mut ScrollState,
-    _config: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let [controls_area, summary_area, content_area] = Layout::vertical([
@@ -110,11 +166,11 @@ pub fn render_summary(
     Ok(())
 }
 
-pub fn render_detail(
+fn render_detail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
     scroll_state: &mut ScrollState,
-    config: &Config,
+    cfg: &Config,
     mode: DetailMode,
 ) -> Result<()> {
     terminal.draw(|frame| {
@@ -130,10 +186,10 @@ pub fn render_detail(
 
         let lines = match mode {
             DetailMode::ByWeek => {
-                build_detail_by_week_content(data, config, content_area.width as usize)
+                build_detail_by_week_content(data, cfg, content_area.width as usize)
             }
             DetailMode::ByRepo => {
-                build_detail_by_repo_content(data, config, content_area.width as usize)
+                build_detail_by_repo_content(data, cfg, content_area.width as usize)
             }
         };
         render_scrollable_content(frame, content_area, lines, scroll_state);
@@ -142,11 +198,11 @@ pub fn render_detail(
     Ok(())
 }
 
-pub fn render_tail(
+fn render_tail(
     terminal: &mut Terminal<CrosstermBackend<std::io::Stdout>>,
     data: &MonthData,
     scroll_state: &mut ScrollState,
-    config: &Config,
+    cfg: &Config,
 ) -> Result<()> {
     terminal.draw(|frame| {
         let [controls_area, summary_area, content_area] = Layout::vertical([
@@ -159,7 +215,7 @@ pub fn render_tail(
         render_controls(frame, controls_area, View::Tail);
         render_summary_header(frame, summary_area, data);
 
-        let lines = build_tail_content(data, config, content_area.width as usize);
+        let lines = build_tail_content(data, cfg, content_area.width as usize);
         render_scrollable_content(frame, content_area, lines, scroll_state);
     })?;
 
@@ -420,7 +476,7 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
 
 fn build_detail_by_week_content(
     data: &MonthData,
-    config: &Config,
+    cfg: &Config,
     width: usize,
 ) -> Vec<Line<'static>> {
     let usable_width = width
@@ -448,7 +504,7 @@ fn build_detail_by_week_content(
         );
 
         for pr in prs {
-            let pr_size = pr.size(&config.size);
+            let pr_size = pr.size(&cfg.size);
             let size_color = match pr_size {
                 PRSize::S => Color::Green,
                 PRSize::M => Color::Blue,
@@ -500,7 +556,7 @@ fn build_detail_by_week_content(
 
 fn build_detail_by_repo_content(
     data: &MonthData,
-    config: &Config,
+    cfg: &Config,
     width: usize,
 ) -> Vec<Line<'static>> {
     let usable_width = width
@@ -528,7 +584,7 @@ fn build_detail_by_repo_content(
         );
 
         for pr in prs {
-            let pr_size = pr.size(&config.size);
+            let pr_size = pr.size(&cfg.size);
             let size_color = match pr_size {
                 PRSize::S => Color::Green,
                 PRSize::M => Color::Blue,
@@ -578,7 +634,7 @@ fn build_detail_by_repo_content(
     lines
 }
 
-fn build_tail_content(data: &MonthData, config: &Config, width: usize) -> Vec<Line<'static>> {
+fn build_tail_content(data: &MonthData, cfg: &Config, width: usize) -> Vec<Line<'static>> {
     let mut all_prs: Vec<PRDetail> = data.prs_by_week.iter().flatten().cloned().collect();
     all_prs.sort_by(|a, b| b.lead_time.cmp(&a.lead_time));
 
@@ -601,7 +657,7 @@ fn build_tail_content(data: &MonthData, config: &Config, width: usize) -> Vec<Li
     );
 
     for pr in &all_prs {
-        let pr_size = pr.size(&config.size);
+        let pr_size = pr.size(&cfg.size);
         let size_color = match pr_size {
             PRSize::S => Color::Green,
             PRSize::M => Color::Blue,
