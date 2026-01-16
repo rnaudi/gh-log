@@ -1,6 +1,10 @@
 queue_rules:
   - name: default
-    conditions:
+    queue_conditions:
+      - check-success=Format
+      - check-success=Clippy
+      - check-success=Test
+    merge_conditions:
       - check-success=Format
       - check-success=Clippy
       - check-success=Test
