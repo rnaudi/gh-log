@@ -143,7 +143,6 @@ impl CommandClient {
                 .arg("-f")
                 .arg(format!("query={}", query))
                 .output()?;
-
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 bail!("GraphQL query failed: {}", stderr);
@@ -204,7 +203,6 @@ impl CommandClient {
                 .arg("-f")
                 .arg(format!("query={}", query))
                 .output()?;
-
             if !output.status.success() {
                 let stderr = String::from_utf8_lossy(&output.stderr);
                 bail!("GraphQL query failed: {}", stderr);
