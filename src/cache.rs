@@ -7,7 +7,7 @@ use std::path::PathBuf;
 
 use crate::github::PullRequest;
 
-const MAX_SIZE: usize = 10_000;
+const MAX_CACHE_SIZE: usize = 10_000;
 
 #[derive(Debug)]
 pub struct Cache {
@@ -31,7 +31,7 @@ impl Cache {
         fs::create_dir_all(&cache_dir)
             .with_context(|| format!("Failed to create cache directory: {:?}", cache_dir))?;
 
-        Self::new(cache_dir, MAX_SIZE)
+        Self::new(cache_dir, MAX_CACHE_SIZE)
     }
 
     pub fn new(cache_dir: PathBuf, max_prs_in_cache: usize) -> anyhow::Result<Self> {
