@@ -469,6 +469,7 @@ mod tests {
     use super::*;
     use crate::github::{Author, PullRequest, Repository, Review, Reviews};
 
+    #[allow(clippy::too_many_arguments)]
     fn create_test_pr(
         number: u32,
         title: &str,
@@ -770,5 +771,77 @@ mod tests {
         assert_eq!(prs_by_repo[0][0].number, 1);
         assert_eq!(prs_by_repo[1].len(), 1);
         assert_eq!(prs_by_repo[1][0].number, 2);
+    }
+
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn test_avg_duration_bounds(
+            hours in prop::collection::vec(1i64..1000, 1..100),
+        ) {
+            let durations: Vec<Duration> = hours.iter().map(|&h| Duration::hours(h)).collect();
+            let avg = avg_duration(&durations);
+
+            let min = durations.iter().min().unwrap();
+            let max = durations.iter().max().unwrap();
+
+            // Average should be between min and max
+            prop_assert!(avg >= *min);
+            prop_assert!(avg <= *max);
+        }
+
+        #[test]
+        fn test_group_prs_by_repo_preserves_count(
+            pr_count in 1usize..50,
+        ) {
+            let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+            let prs: Vec<PRData> = (0..pr_count).map(|i| PRData {
+                number: i as u32,
+                title: format!("PR {}", i),
+                body: None,
+                created_at: base_date,
+                lead_time: Duration::hours(1),
+                repo_name: format!("owner/repo-{}", i % 5), // 5 different repos
+                additions: 10,
+                deletions: 5,
+                changed_files: 2,
+            }).collect();
+
+            let by_repo = group_prs_by_repo(&prs);
+
+            // Total count should be preserved
+            let total: usize = by_repo.values().map(|v| v.len()).sum();
+            prop_assert_eq!(total, pr_count);
+        }
+
+        #[test]
+        fn test_compute_size_counts_sum_equals_input_count(
+            pr_count in 1usize..100,
+        ) {
+            let config = Config::default().unwrap();
+            let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+            let prs: Vec<PRData> = (0..pr_count).map(|i| {
+                let additions = (i as u32 * 73) % 1000; // Pseudo-random but deterministic
+                PRData {
+                    number: i as u32,
+                    title: format!("PR {}", i),
+                    body: None,
+                    created_at: base_date,
+                    lead_time: Duration::hours(1),
+                    repo_name: "owner/repo".to_string(),
+                    additions,
+                    deletions: additions / 2,
+                    changed_files: (additions / 50).min(30),
+                }
+            }).collect();
+
+            let (s, m, l, xl) = compute_size_counts(&prs, &config);
+
+            // Sum of all sizes should equal input count
+            prop_assert_eq!(s + m + l + xl, pr_count);
+        }
     }
 }
