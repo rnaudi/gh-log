@@ -207,7 +207,7 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     let cfg = config::Config::default()?;
-    let month_data = data::process_prs(prs, reviewed_count, &cfg);
+    let month_data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
     view::run(month_data, cfg)
 }
@@ -216,7 +216,7 @@ fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Res
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     let cfg = config::Config::default()?;
-    let data = data::process_prs(prs, reviewed_count, &cfg);
+    let data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
     match format {
         OutputFormat::Raw => print_data(&data, month, &cfg),

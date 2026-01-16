@@ -2,7 +2,10 @@ use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use std::collections::BTreeMap;
 use std::fmt;
 
-use crate::config::{Config, SizeConfig};
+use crate::{
+    config::{Config, SizeConfig},
+    github,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PRSize {
@@ -129,10 +132,15 @@ pub struct MonthData {
     pub reviewed_count: usize,
 }
 
-impl Default for MonthData {
-    fn default() -> Self {
+impl MonthData {
+    fn empty(month: &str) -> Self {
+        let parts: Vec<&str> = month.split('-').collect();
+        let year: i32 = parts[0].parse().unwrap();
+        let month: u32 = parts[1].parse().unwrap();
+        let month_start = Utc.with_ymd_and_hms(year, month, 1, 0, 0, 0).unwrap();
+
         Self {
-            month_start: Utc::now(),
+            month_start,
             total_prs: 0,
             avg_lead_time: Duration::zero(),
             frequency: 0.0,
@@ -148,9 +156,7 @@ impl Default for MonthData {
             reviewed_count: 0,
         }
     }
-}
 
-impl MonthData {
     pub fn format_size_distribution(&self) -> String {
         format!(
             "{}S {}M {}L {}XL",
@@ -180,17 +186,258 @@ struct PRData {
     changed_files: u32,
 }
 
-pub fn process_prs(
-    prs: Vec<crate::github::PullRequest>,
+pub fn build_month_data(
+    month: &str,
+    mut prs: Vec<github::PullRequest>,
     reviewed_count: usize,
-    config: &Config,
+    cfg: &Config,
 ) -> MonthData {
     if prs.is_empty() {
-        return MonthData::default();
+        return MonthData::empty(month);
     }
 
+    prs.retain(|pr| !cfg.should_exclude_pr_title(&pr.title));
+    prs.retain(|pr| !cfg.should_exclude_repo(&pr.repository.name_with_owner));
+    if prs.is_empty() {
+        return MonthData::empty(month);
+    }
+
+    let reviewers = extract_reviewers(&prs);
+    let mut pr_data = match build_pr_data(&prs) {
+        Some(data) => data,
+        None => return MonthData::empty(month),
+    };
+
+    pr_data.retain(|pr| !cfg.should_ignore_repo(&pr.repo_name));
+    pr_data.retain(|pr| !cfg.should_ignore_pr_title(&pr.title));
+    if pr_data.is_empty() {
+        return MonthData::empty(month);
+    }
+
+    let first_pr_date = pr_data.first().unwrap().created_at;
+    let last_pr_date = pr_data.last().unwrap().created_at;
+
+    let by_week = group_prs_by_week(&pr_data, first_pr_date, last_pr_date);
+    let by_repo = group_prs_by_repo(&pr_data);
+
+    let month_start = Utc
+        .with_ymd_and_hms(first_pr_date.year(), first_pr_date.month(), 1, 0, 0, 0)
+        .unwrap();
+    let avg_lead_time = avg_duration(&pr_data.iter().map(|pr| pr.lead_time).collect::<Vec<_>>());
+    let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
+    let frequency = pr_data.len() as f64 / (time_span_days / 7.0).max(1.0);
+    let week_data = build_week_data(&by_week);
+    let pr_details_by_week = build_pr_details_by_week(&by_week);
+    let repos = build_repo_data(&by_repo, cfg);
+    let (size_s, size_m, size_l, size_xl) = compute_size_counts(&pr_data, cfg);
+    let prs_by_repo = build_prs_by_repo(&repos, &by_repo);
+
+    MonthData {
+        month_start,
+        total_prs: pr_data.len(),
+        avg_lead_time,
+        frequency,
+        size_s,
+        size_m,
+        size_l,
+        size_xl,
+        weeks: week_data,
+        repos,
+        prs_by_week: pr_details_by_week,
+        prs_by_repo,
+        reviewers,
+        reviewed_count,
+    }
+}
+
+fn group_prs_by_week(
+    pr_data: &[PRData],
+    first_pr_date: DateTime<Utc>,
+    last_pr_date: DateTime<Utc>,
+) -> Vec<(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)> {
+    let days_from_monday = first_pr_date.weekday().num_days_from_monday() as i64;
+    let week1_start = (first_pr_date - Duration::days(days_from_monday))
+        .date_naive()
+        .and_hms_opt(0, 0, 0)
+        .unwrap()
+        .and_utc();
+
+    let days_span = (last_pr_date - week1_start).num_days();
+    let weeks_needed = ((days_span / 7) + 1).max(1) as usize;
+
+    let mut weeks: Vec<(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)> = Vec::new();
+    for i in 0..weeks_needed {
+        let start = week1_start + Duration::days((i * 7) as i64);
+        let end = (start + Duration::days(6))
+            .date_naive()
+            .and_hms_opt(23, 59, 59)
+            .unwrap()
+            .and_utc();
+        weeks.push((start, end, Vec::new()));
+    }
+
+    for pr in pr_data {
+        for (start, end, prs) in &mut weeks {
+            if *start <= pr.created_at && pr.created_at <= *end {
+                prs.push(pr.clone());
+                break;
+            }
+        }
+    }
+
+    weeks
+}
+
+fn group_prs_by_repo(pr_data: &[PRData]) -> BTreeMap<String, Vec<PRData>> {
+    let mut by_repo: BTreeMap<String, Vec<PRData>> = BTreeMap::new();
+    for pr in pr_data {
+        by_repo
+            .entry(pr.repo_name.clone())
+            .or_default()
+            .push(pr.clone());
+    }
+    by_repo
+}
+
+fn build_week_data(weeks: &[(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)]) -> Vec<WeekData> {
+    weeks
+        .iter()
+        .enumerate()
+        .map(|(i, (start, end, prs))| {
+            let lead_times: Vec<Duration> = prs.iter().map(|pr| pr.lead_time).collect();
+            WeekData {
+                week_num: i + 1,
+                week_start: *start,
+                week_end: *end,
+                pr_count: prs.len(),
+                avg_lead_time: avg_duration(&lead_times),
+            }
+        })
+        .collect()
+}
+
+fn build_pr_details_by_week(
+    weeks: &[(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)],
+) -> Vec<Vec<PRDetail>> {
+    weeks
+        .iter()
+        .map(|(_, _, prs)| {
+            prs.iter()
+                .map(|pr| PRDetail {
+                    created_at: pr.created_at,
+                    repo: pr.repo_name.clone(),
+                    number: pr.number,
+                    title: pr.title.clone(),
+                    body: pr.body.clone(),
+                    lead_time: pr.lead_time,
+                    additions: pr.additions,
+                    deletions: pr.deletions,
+                    changed_files: pr.changed_files,
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn build_repo_data(by_repo: &BTreeMap<String, Vec<PRData>>, cfg: &Config) -> Vec<RepoData> {
+    let mut repos: Vec<RepoData> = by_repo
+        .iter()
+        .map(|(name, repo_prs)| {
+            let lead_times: Vec<Duration> = repo_prs.iter().map(|pr| pr.lead_time).collect();
+            let (size_s, size_m, size_l, size_xl) = compute_size_counts(repo_prs, cfg);
+
+            RepoData {
+                name: name.clone(),
+                pr_count: repo_prs.len(),
+                avg_lead_time: avg_duration(&lead_times),
+                size_s,
+                size_m,
+                size_l,
+                size_xl,
+            }
+        })
+        .collect();
+    repos.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
+    repos
+}
+
+fn compute_size_counts<T: AsRef<PRData>>(prs: &[T], cfg: &Config) -> (usize, usize, usize, usize) {
+    let mut size_s = 0;
+    let mut size_m = 0;
+    let mut size_l = 0;
+    let mut size_xl = 0;
+
+    for pr in prs {
+        let pr = pr.as_ref();
+        match compute_pr_size(pr.additions, pr.deletions, pr.changed_files, &cfg.size) {
+            PRSize::S => size_s += 1,
+            PRSize::M => size_m += 1,
+            PRSize::L => size_l += 1,
+            PRSize::XL => size_xl += 1,
+        }
+    }
+
+    (size_s, size_m, size_l, size_xl)
+}
+
+fn extract_reviewers(prs: &[crate::github::PullRequest]) -> Vec<ReviewerData> {
+    let mut reviewer_map: BTreeMap<String, usize> = BTreeMap::new();
+    for pr in prs {
+        for review in &pr.reviews.nodes {
+            *reviewer_map.entry(review.author.login.clone()).or_insert(0) += 1;
+        }
+    }
+
+    let mut reviewers: Vec<ReviewerData> = reviewer_map
+        .iter()
+        .map(|(login, count)| ReviewerData {
+            login: login.clone(),
+            pr_count: *count,
+        })
+        .collect();
+    reviewers.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
+    reviewers
+}
+
+fn build_prs_by_repo(
+    repos: &[RepoData],
+    by_repo: &BTreeMap<String, Vec<PRData>>,
+) -> Vec<Vec<PRDetail>> {
+    repos
+        .iter()
+        .map(|repo| {
+            by_repo
+                .get(&repo.name)
+                .map(|repo_prs| {
+                    repo_prs
+                        .iter()
+                        .map(|pr| PRDetail {
+                            created_at: pr.created_at,
+                            repo: pr.repo_name.clone(),
+                            number: pr.number,
+                            title: pr.title.clone(),
+                            body: pr.body.clone(),
+                            lead_time: pr.lead_time,
+                            additions: pr.additions,
+                            deletions: pr.deletions,
+                            changed_files: pr.changed_files,
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        })
+        .collect()
+}
+
+impl AsRef<PRData> for PRData {
+    fn as_ref(&self) -> &PRData {
+        self
+    }
+}
+
+fn build_pr_data(prs: &[github::PullRequest]) -> Option<Vec<PRData>> {
     let mut pr_data: Vec<PRData> = Vec::with_capacity(prs.len());
-    for pr in &prs {
+    for pr in prs {
         let lead_time = pr.updated_at - pr.created_at;
         assert!(
             lead_time >= Duration::zero(),
@@ -214,359 +461,314 @@ pub fn process_prs(
     }
 
     pr_data.sort_by_key(|pr| pr.created_at);
-
-    pr_data.retain(|pr| {
-        !config.should_exclude_repo(&pr.repo_name) && !config.should_exclude_pr_title(&pr.title)
-    });
-
-    let pr_data_for_metrics: Vec<&PRData> = pr_data
-        .iter()
-        .filter(|pr| {
-            !config.should_ignore_repo(&pr.repo_name) && !config.should_ignore_pr_title(&pr.title)
-        })
-        .collect();
-
-    // If all PRs are excluded, still show them but with zero metrics
-    if pr_data_for_metrics.is_empty() {
-        // Use all PRs for display purposes
-        let first_pr_date = pr_data.first().unwrap().created_at;
-        let month_start = {
-            let dt = first_pr_date;
-            Utc.with_ymd_and_hms(dt.year(), dt.month(), 1, 0, 0, 0)
-                .unwrap()
-        };
-
-        return MonthData {
-            month_start,
-            total_prs: 0,
-            avg_lead_time: Duration::zero(),
-            frequency: 0.0,
-            size_s: 0,
-            size_m: 0,
-            size_l: 0,
-            size_xl: 0,
-            weeks: Vec::new(),
-            repos: Vec::new(),
-            prs_by_week: Vec::new(),
-            prs_by_repo: Vec::new(),
-            reviewers: Vec::new(),
-            reviewed_count: 0,
-        };
-    }
-
-    let first_pr_date = pr_data_for_metrics.first().unwrap().created_at;
-    let last_pr_date = pr_data_for_metrics.last().unwrap().created_at;
-
-    let month_start = Utc
-        .with_ymd_and_hms(first_pr_date.year(), first_pr_date.month(), 1, 0, 0, 0)
-        .unwrap();
-
-    let days_from_monday = first_pr_date.weekday().num_days_from_monday() as i64;
-    let week1_start = (first_pr_date - Duration::days(days_from_monday))
-        .date_naive()
-        .and_hms_opt(0, 0, 0)
-        .unwrap()
-        .and_utc();
-
-    // Calculate how many weeks we need to cover all PRs
-    let days_span = (last_pr_date - week1_start).num_days();
-    let weeks_needed = ((days_span / 7) + 1).max(1) as usize;
-
-    let mut weeks: Vec<(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)> = Vec::new();
-    for i in 0..weeks_needed {
-        let start = week1_start + Duration::days((i * 7) as i64);
-        let end = (start + Duration::days(6))
-            .date_naive()
-            .and_hms_opt(23, 59, 59)
-            .unwrap()
-            .and_utc();
-        weeks.push((start, end, Vec::new()));
-    }
-
-    for pr in &pr_data {
-        for (start, end, prs) in &mut weeks {
-            if *start <= pr.created_at && pr.created_at <= *end {
-                prs.push(pr.clone());
-                break;
-            }
-        }
-    }
-
-    let mut by_repo: BTreeMap<String, Vec<PRData>> = BTreeMap::new();
-    for pr in &pr_data {
-        by_repo
-            .entry(pr.repo_name.clone())
-            .or_default()
-            .push(pr.clone());
-    }
-
-    let avg_lead_time = avg_duration(
-        &pr_data_for_metrics
-            .iter()
-            .map(|pr| pr.lead_time)
-            .collect::<Vec<_>>(),
-    );
-
-    let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
-    let frequency = pr_data_for_metrics.len() as f64 / (time_span_days / 7.0).max(1.0);
-
-    let week_data: Vec<WeekData> = weeks
-        .iter()
-        .enumerate()
-        .map(|(i, (start, end, prs))| {
-            let lead_times: Vec<Duration> = prs.iter().map(|pr| pr.lead_time).collect();
-            WeekData {
-                week_num: i + 1,
-                week_start: *start,
-                week_end: *end,
-                pr_count: prs.len(),
-                avg_lead_time: avg_duration(&lead_times),
-            }
-        })
-        .collect();
-
-    let pr_details_by_week: Vec<Vec<PRDetail>> = weeks
-        .iter()
-        .map(|(_, _, prs)| {
-            prs.iter()
-                .map(|pr| PRDetail {
-                    created_at: pr.created_at,
-                    repo: pr.repo_name.clone(),
-                    number: pr.number,
-                    title: pr.title.clone(),
-                    body: pr.body.clone(),
-                    lead_time: pr.lead_time,
-                    additions: pr.additions,
-                    deletions: pr.deletions,
-                    changed_files: pr.changed_files,
-                })
-                .collect()
-        })
-        .collect();
-
-    let mut repos: Vec<RepoData> = by_repo
-        .iter()
-        .map(|(name, repo_prs)| {
-            let lead_times: Vec<Duration> = repo_prs.iter().map(|pr| pr.lead_time).collect();
-            let mut size_s = 0;
-            let mut size_m = 0;
-            let mut size_l = 0;
-            let mut size_xl = 0;
-
-            for pr in repo_prs {
-                match compute_pr_size(pr.additions, pr.deletions, pr.changed_files, &config.size) {
-                    PRSize::S => size_s += 1,
-                    PRSize::M => size_m += 1,
-                    PRSize::L => size_l += 1,
-                    PRSize::XL => size_xl += 1,
-                }
-            }
-
-            RepoData {
-                name: name.clone(),
-                pr_count: repo_prs.len(),
-                avg_lead_time: avg_duration(&lead_times),
-                size_s,
-                size_m,
-                size_l,
-                size_xl,
-            }
-        })
-        .collect();
-    repos.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
-
-    let mut size_s = 0;
-    let mut size_m = 0;
-    let mut size_l = 0;
-    let mut size_xl = 0;
-
-    // Only count sizes for non-excluded PRs
-    for pr in &pr_data_for_metrics {
-        match compute_pr_size(pr.additions, pr.deletions, pr.changed_files, &config.size) {
-            PRSize::S => size_s += 1,
-            PRSize::M => size_m += 1,
-            PRSize::L => size_l += 1,
-            PRSize::XL => size_xl += 1,
-        }
-    }
-
-    let mut reviewer_map: BTreeMap<String, usize> = BTreeMap::new();
-    for pr in &prs {
-        for review in &pr.reviews.nodes {
-            *reviewer_map.entry(review.author.login.clone()).or_insert(0) += 1;
-        }
-    }
-
-    let mut reviewers: Vec<ReviewerData> = reviewer_map
-        .iter()
-        .map(|(login, count)| ReviewerData {
-            login: login.clone(),
-            pr_count: *count,
-        })
-        .collect();
-    reviewers.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
-
-    let prs_by_repo: Vec<Vec<PRDetail>> = repos
-        .iter()
-        .map(|repo| {
-            by_repo
-                .get(&repo.name)
-                .map(|repo_prs| {
-                    repo_prs
-                        .iter()
-                        .map(|pr| PRDetail {
-                            created_at: pr.created_at,
-                            repo: pr.repo_name.clone(),
-                            number: pr.number,
-                            title: pr.title.clone(),
-                            body: pr.body.clone(),
-                            lead_time: pr.lead_time,
-                            additions: pr.additions,
-                            deletions: pr.deletions,
-                            changed_files: pr.changed_files,
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        })
-        .collect();
-
-    MonthData {
-        month_start,
-        total_prs: pr_data_for_metrics.len(),
-        avg_lead_time,
-        frequency,
-        size_s,
-        size_m,
-        size_l,
-        size_xl,
-        weeks: week_data,
-        repos,
-        prs_by_week: pr_details_by_week,
-        prs_by_repo,
-        reviewers,
-        reviewed_count,
-    }
+    Some(pr_data)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::github::{Author, PullRequest, Repository, Review, Reviews};
 
-    #[test]
-    fn test_compute_pr_size() {
-        use crate::config::SizeConfig;
-        let config = SizeConfig::default();
-
-        // Small: <= 50 lines
-        assert_eq!(compute_pr_size(10, 5, 1, &config), PRSize::S);
-        assert_eq!(compute_pr_size(25, 25, 3, &config), PRSize::S);
-        assert_eq!(compute_pr_size(50, 0, 5, &config), PRSize::S);
-        assert_eq!(compute_pr_size(0, 50, 2, &config), PRSize::S);
-
-        // Medium: 51-200 lines
-        assert_eq!(compute_pr_size(51, 0, 1, &config), PRSize::M);
-        assert_eq!(compute_pr_size(100, 50, 5, &config), PRSize::M);
-        assert_eq!(compute_pr_size(150, 50, 8, &config), PRSize::M);
-        assert_eq!(compute_pr_size(200, 0, 10, &config), PRSize::M);
-
-        // Large: 201-500 lines
-        assert_eq!(compute_pr_size(201, 0, 1, &config), PRSize::L);
-        assert_eq!(compute_pr_size(300, 100, 8, &config), PRSize::L);
-        assert_eq!(compute_pr_size(250, 250, 12, &config), PRSize::L);
-        assert_eq!(compute_pr_size(500, 0, 14, &config), PRSize::L);
-
-        // XL: > 500 lines
-        assert_eq!(compute_pr_size(501, 0, 1, &config), PRSize::XL);
-        assert_eq!(compute_pr_size(1000, 500, 10, &config), PRSize::XL);
-        assert_eq!(compute_pr_size(5000, 2000, 20, &config), PRSize::XL);
-
-        // File count overrides: >= 15 files bumps to at least L
-        assert_eq!(compute_pr_size(10, 5, 15, &config), PRSize::L);
-        assert_eq!(compute_pr_size(50, 50, 20, &config), PRSize::L);
-
-        // File count overrides: >= 15 files with > 500 lines is XL
-        assert_eq!(compute_pr_size(300, 300, 15, &config), PRSize::XL);
-
-        // File count overrides: >= 25 files is always XL
-        assert_eq!(compute_pr_size(10, 5, 25, &config), PRSize::XL);
-        assert_eq!(compute_pr_size(1, 1, 30, &config), PRSize::XL);
-        assert_eq!(compute_pr_size(100, 50, 50, &config), PRSize::XL);
-
-        // Test with custom thresholds
-        let custom_config = SizeConfig::new(100, 500, 1000);
-        assert_eq!(compute_pr_size(100, 0, 1, &custom_config), PRSize::S);
-        assert_eq!(compute_pr_size(101, 0, 1, &custom_config), PRSize::M);
-        assert_eq!(compute_pr_size(500, 0, 1, &custom_config), PRSize::M);
-        assert_eq!(compute_pr_size(501, 0, 1, &custom_config), PRSize::L);
-        assert_eq!(compute_pr_size(1000, 0, 1, &custom_config), PRSize::L);
-        assert_eq!(compute_pr_size(1001, 0, 1, &custom_config), PRSize::XL);
+    fn create_test_pr(
+        number: u32,
+        title: &str,
+        repo_name: &str,
+        created_at: DateTime<Utc>,
+        updated_at: DateTime<Utc>,
+        additions: u32,
+        deletions: u32,
+        changed_files: u32,
+        reviewers: Vec<&str>,
+    ) -> PullRequest {
+        PullRequest {
+            number,
+            title: title.to_string(),
+            body: Some(format!("Description for {}", title)),
+            repository: Repository {
+                name_with_owner: repo_name.to_string(),
+            },
+            created_at,
+            updated_at,
+            additions,
+            deletions,
+            changed_files,
+            reviews: Reviews {
+                nodes: reviewers
+                    .into_iter()
+                    .map(|login| Review {
+                        author: Author {
+                            login: login.to_string(),
+                        },
+                    })
+                    .collect(),
+            },
+        }
     }
 
     #[test]
-    fn test_pr_detail_size_method() {
-        use crate::config::SizeConfig;
-        let config = SizeConfig::default();
-        let pr = PRDetail {
-            created_at: Utc::now(),
-            repo: "test/repo".to_string(),
-            number: 1,
-            title: "Test PR".to_string(),
-            body: None,
-            lead_time: Duration::hours(1),
-            additions: 100,
-            deletions: 50,
-            changed_files: 5,
-        };
-        assert_eq!(pr.size(&config), PRSize::M);
+    fn test_build_month_data_empty_input() {
+        let config = Config::default().unwrap();
+        let prs = vec![];
+
+        let result = build_month_data("2024-01", prs, 0, &config);
+
+        assert_eq!(result.total_prs, 0);
+        assert_eq!(result.weeks.len(), 0);
+        assert_eq!(result.repos.len(), 0);
     }
 
     #[test]
-    fn test_repo_data_format_size_distribution() {
-        let repo = RepoData {
-            name: "test/repo".to_string(),
-            pr_count: 10,
-            avg_lead_time: Duration::hours(2),
-            size_s: 3,
-            size_m: 2,
-            size_l: 4,
-            size_xl: 1,
-        };
-        assert_eq!(repo.format_size_distribution(), "3S 2M 4L 1XL");
+    fn test_build_month_data_single_pr() {
+        let config = Config::default().unwrap();
+        let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+        let prs = vec![create_test_pr(
+            1,
+            "Add feature",
+            "owner/repo-a",
+            base_date,
+            base_date + Duration::hours(5),
+            30,
+            10,
+            3,
+            vec!["reviewer1"],
+        )];
+
+        let result = build_month_data("2024-01", prs, 1, &config);
+
+        assert_eq!(result.total_prs, 1);
+        assert_eq!(result.size_s, 1);
+        assert_eq!(result.reviewed_count, 1);
+        assert_eq!(result.reviewers.len(), 1);
+        assert_eq!(result.reviewers[0].login, "reviewer1");
+        assert_eq!(result.repos.len(), 1);
+        assert_eq!(result.repos[0].name, "owner/repo-a");
     }
 
     #[test]
-    fn test_repo_data_format_size_distribution_zeros() {
-        let repo = RepoData {
-            name: "test/repo".to_string(),
-            pr_count: 5,
-            avg_lead_time: Duration::minutes(30),
-            size_s: 5,
-            size_m: 0,
-            size_l: 0,
-            size_xl: 0,
-        };
-        assert_eq!(repo.format_size_distribution(), "5S 0M 0L 0XL");
+    fn test_build_month_data_multiple_repos_sorted_by_pr_count() {
+        let config = Config::default().unwrap();
+        let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+        let prs = vec![
+            create_test_pr(
+                1,
+                "PR 1",
+                "owner/repo-a",
+                base_date,
+                base_date + Duration::hours(2),
+                20,
+                10,
+                2,
+                vec![],
+            ),
+            create_test_pr(
+                2,
+                "PR 2",
+                "owner/repo-b",
+                base_date + Duration::hours(1),
+                base_date + Duration::hours(3),
+                30,
+                15,
+                3,
+                vec![],
+            ),
+            create_test_pr(
+                3,
+                "PR 3",
+                "owner/repo-a",
+                base_date + Duration::hours(2),
+                base_date + Duration::hours(4),
+                40,
+                20,
+                4,
+                vec![],
+            ),
+        ];
+
+        let result = build_month_data("2024-01", prs, 0, &config);
+
+        assert_eq!(result.total_prs, 3);
+        assert_eq!(result.repos.len(), 2);
+        // Repos should be sorted by PR count (repo-a has 2, repo-b has 1)
+        assert_eq!(result.repos[0].name, "owner/repo-a");
+        assert_eq!(result.repos[0].pr_count, 2);
+        assert_eq!(result.repos[1].name, "owner/repo-b");
+        assert_eq!(result.repos[1].pr_count, 1);
     }
 
     #[test]
-    fn test_month_data_format_size_distribution() {
-        let month = MonthData {
-            month_start: Utc::now(),
-            total_prs: 34,
-            avg_lead_time: Duration::minutes(35),
-            frequency: 119.0,
-            size_s: 26,
-            size_m: 3,
-            size_l: 4,
-            size_xl: 1,
-            weeks: Vec::new(),
-            repos: Vec::new(),
-            prs_by_week: Vec::new(),
-            prs_by_repo: Vec::new(),
-            reviewers: Vec::new(),
-            reviewed_count: 0,
-        };
-        assert_eq!(month.format_size_distribution(), "26S 3M 4L 1XL");
+    fn test_build_month_data_size_distribution() {
+        let config = Config::default().unwrap();
+        let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
+
+        let prs = vec![
+            create_test_pr(
+                1,
+                "Small PR",
+                "owner/repo",
+                base_date,
+                base_date + Duration::hours(1),
+                20,
+                10,
+                2,
+                vec![],
+            ),
+            create_test_pr(
+                2,
+                "Medium PR",
+                "owner/repo",
+                base_date + Duration::hours(1),
+                base_date + Duration::hours(3),
+                100,
+                50,
+                5,
+                vec![],
+            ),
+            create_test_pr(
+                3,
+                "Large PR",
+                "owner/repo",
+                base_date + Duration::hours(2),
+                base_date + Duration::hours(5),
+                300,
+                100,
+                10,
+                vec![],
+            ),
+            create_test_pr(
+                4,
+                "XL PR",
+                "owner/repo",
+                base_date + Duration::hours(3),
+                base_date + Duration::hours(7),
+                600,
+                200,
+                15,
+                vec![],
+            ),
+        ];
+
+        let result = build_month_data("2024-01", prs, 0, &config);
+
+        assert_eq!(result.total_prs, 4);
+        assert_eq!(result.size_s, 1);
+        assert_eq!(result.size_m, 1);
+        assert_eq!(result.size_l, 1);
+        assert_eq!(result.size_xl, 1);
+        assert_eq!(result.format_size_distribution(), "1S 1M 1L 1XL");
+    }
+
+    #[test]
+    fn test_build_month_data_week_grouping() {
+        let config = Config::default().unwrap();
+        let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap(); // Monday
+
+        let prs = vec![
+            create_test_pr(
+                1,
+                "Week 1 PR 1",
+                "owner/repo",
+                base_date,
+                base_date + Duration::hours(2),
+                20,
+                10,
+                2,
+                vec![],
+            ),
+            create_test_pr(
+                2,
+                "Week 1 PR 2",
+                "owner/repo",
+                base_date + Duration::days(2),
+                base_date + Duration::days(2) + Duration::hours(3),
+                30,
+                15,
+                3,
+                vec![],
+            ),
+            create_test_pr(
+                3,
+                "Week 2 PR",
+                "owner/repo",
+                base_date + Duration::days(8),
+                base_date + Duration::days(8) + Duration::hours(4),
+                40,
+                20,
+                4,
+                vec![],
+            ),
+        ];
+
+        let result = build_month_data("2024-01", prs, 0, &config);
+
+        assert_eq!(result.total_prs, 3);
+        assert!(result.weeks.len() >= 2);
+        assert_eq!(result.prs_by_week[0].len(), 2);
+        assert_eq!(result.prs_by_week[1].len(), 1);
+    }
+
+    #[test]
+    fn test_build_prs_by_repo() {
+        let mut by_repo = BTreeMap::new();
+
+        by_repo.insert(
+            "owner/repo-a".to_string(),
+            vec![PRData {
+                number: 1,
+                title: "PR 1".to_string(),
+                body: None,
+                created_at: Utc::now(),
+                lead_time: Duration::hours(1),
+                repo_name: "owner/repo-a".to_string(),
+                additions: 10,
+                deletions: 5,
+                changed_files: 2,
+            }],
+        );
+
+        by_repo.insert(
+            "owner/repo-b".to_string(),
+            vec![PRData {
+                number: 2,
+                title: "PR 2".to_string(),
+                body: None,
+                created_at: Utc::now(),
+                lead_time: Duration::hours(2),
+                repo_name: "owner/repo-b".to_string(),
+                additions: 20,
+                deletions: 10,
+                changed_files: 3,
+            }],
+        );
+
+        let repos = vec![
+            RepoData {
+                name: "owner/repo-a".to_string(),
+                pr_count: 1,
+                avg_lead_time: Duration::hours(1),
+                size_s: 1,
+                size_m: 0,
+                size_l: 0,
+                size_xl: 0,
+            },
+            RepoData {
+                name: "owner/repo-b".to_string(),
+                pr_count: 1,
+                avg_lead_time: Duration::hours(2),
+                size_s: 1,
+                size_m: 0,
+                size_l: 0,
+                size_xl: 0,
+            },
+        ];
+
+        let prs_by_repo = build_prs_by_repo(&repos, &by_repo);
+
+        assert_eq!(prs_by_repo.len(), 2);
+        assert_eq!(prs_by_repo[0].len(), 1);
+        assert_eq!(prs_by_repo[0][0].number, 1);
+        assert_eq!(prs_by_repo[1].len(), 1);
+        assert_eq!(prs_by_repo[1][0].number, 2);
     }
 }
