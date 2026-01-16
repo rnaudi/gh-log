@@ -12,7 +12,7 @@ crossterm = "0.28"
 clap = { version = "4.5.54", features = ["derive"] }
 regex = "1.12.2"
 anyhow = "1.0.100"
-directories = "5.0"
+directories = "6.0"
 toml = "0.8"
 
 [dev-dependencies]
