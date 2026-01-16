@@ -5,21 +5,8 @@ queue_rules:
       - check-success=clippy
       - check-success=test
     merge_method: rebase
-    batch_size: 3
-    batch_max_wait_time: 5min
 
 pull_request_rules:
-  - name: Automatic merge when CI passes
-    conditions:
-      - check-success=fmt
-      - check-success=clippy
-      - check-success=test
-      - -draft
-      - label!=do-not-merge
-    actions:
-      queue:
-        name: default
-
   - name: Delete head branch after merge
     conditions:
       - merged
