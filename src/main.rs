@@ -182,7 +182,7 @@ fn get_data_with_cache(
     use_cache: bool,
 ) -> anyhow::Result<(Vec<github::PullRequest>, usize)> {
     let cache = cache::Cache::default()?;
-    if use_cache && let Some(cached) = cache.load_from_cache(month)? {
+    if use_cache && let Some(cached) = cache.load(month)? {
         eprintln!("Loading from cache...");
         return Ok((cached.prs, cached.reviewed_count));
     }
@@ -199,7 +199,7 @@ fn get_data_with_cache(
         reviewed_count,
     };
 
-    cache.save_to_cache(&cached_data)?;
+    cache.save(&cached_data)?;
     Ok((prs, reviewed_count))
 }
 

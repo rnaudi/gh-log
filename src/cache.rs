@@ -44,11 +44,7 @@ impl Cache {
         })
     }
 
-    pub fn get_cache_file_path(&self, month: &str) -> Result<PathBuf> {
-        Ok(self.cache_dir.join(format!("{}.json", month)))
-    }
-
-    pub fn load_from_cache(&self, month: &str) -> Result<Option<CachedData>> {
+    pub fn load(&self, month: &str) -> Result<Option<CachedData>> {
         let cache_file = self
             .get_cache_file_path(month)
             .with_context(|| format!("Failed to get cache file path for {}", month))?;
@@ -71,7 +67,7 @@ impl Cache {
         Ok(None)
     }
 
-    pub fn save_to_cache(&self, data: &CachedData) -> Result<()> {
+    pub fn save(&self, data: &CachedData) -> Result<()> {
         if data.prs.len() > self.max_prs_in_cache {
             bail!(
                 "Too many PRs to cache: {}. Max {}",
@@ -87,6 +83,10 @@ impl Cache {
             .with_context(|| format!("Failed to write cache file: {:?}", cache_file))?;
 
         Ok(())
+    }
+
+    fn get_cache_file_path(&self, month: &str) -> Result<PathBuf> {
+        Ok(self.cache_dir.join(format!("{}.json", month)))
     }
 }
 
@@ -162,9 +162,9 @@ mod tests {
         let cache = Cache::new(temp_dir.path().to_path_buf(), 3).unwrap();
 
         let data = create_test_cached_data("2025-01", 2);
-        cache.save_to_cache(&data).unwrap();
+        cache.save(&data).unwrap();
 
-        let loaded = cache.load_from_cache("2025-01").unwrap();
+        let loaded = cache.load("2025-01").unwrap();
         assert!(loaded.is_some());
 
         let cache_file = cache.get_cache_file_path("2025-01").unwrap();
@@ -178,7 +178,7 @@ mod tests {
         let cache = Cache::new(temp_dir.path().to_path_buf(), 10).unwrap();
 
         let data = create_test_cached_data("2025-01", 11);
-        let result = cache.save_to_cache(&data);
+        let result = cache.save(&data);
 
         assert!(result.is_err());
         insta::assert_snapshot!(result.unwrap_err());
@@ -200,11 +200,11 @@ mod tests {
             reviewed_count: 0,
         };
 
-        cache.save_to_cache(&stale_data).unwrap();
+        cache.save(&stale_data).unwrap();
         let cache_file = cache.get_cache_file_path(&current_month).unwrap();
         assert!(cache_file.exists());
 
-        let result = cache.load_from_cache(&current_month).unwrap();
+        let result = cache.load(&current_month).unwrap();
         assert!(result.is_none());
         assert!(!cache_file.exists());
     }
@@ -217,7 +217,7 @@ mod tests {
         let cache_file = cache.get_cache_file_path("2025-01").unwrap();
         fs::write(&cache_file, "{ invalid json }").unwrap();
 
-        let result = cache.load_from_cache("2025-01");
+        let result = cache.load("2025-01");
         assert!(result.is_err());
         insta::assert_snapshot!(result.unwrap_err());
     }
