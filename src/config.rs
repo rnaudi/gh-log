@@ -222,10 +222,8 @@ large = 600
         let temp_dir = TempDir::new().unwrap();
         let config = create_test_config(
             FilterConfig {
-                exclude_repos: vec![],
                 exclude_patterns: vec!["[invalid".to_string()],
-                ignore_repos: vec![],
-                ignore_patterns: vec![],
+                ..Default::default()
             },
             SizeConfig::default(),
             temp_dir.path().join("config.toml"),
