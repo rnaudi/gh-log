@@ -1,9 +1,9 @@
 queue_rules:
   - name: default
     conditions:
-      - check-success=fmt
-      - check-success=clippy
-      - check-success=test
+      - check-success=Format
+      - check-success=Clippy
+      - check-success=Test
     merge_method: rebase
 
 pull_request_rules:
