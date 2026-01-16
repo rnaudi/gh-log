@@ -304,7 +304,7 @@ fn run_config() -> anyhow::Result<()> {
                 println!("{}", toml::to_string_pretty(&config)?);
                 eprintln!("\n# {}", config_path.display());
             } else {
-                config::create_example(&config_path)?;
+                config::example(&config_path)?;
                 println!("Created config: {}", config_path.display());
             }
         }

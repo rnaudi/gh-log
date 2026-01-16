@@ -90,7 +90,7 @@ impl Config {
 
         let config_path = config_dir.join("config.toml");
         if !config_path.exists() {
-            create_example(&config_path)?;
+            example(&config_path)?;
             eprintln!("Created config: {}", config_path.display());
         }
 
@@ -135,7 +135,7 @@ impl Config {
     }
 }
 
-pub fn create_example(config_path: &PathBuf) -> Result<()> {
+pub fn example(config_path: &PathBuf) -> Result<()> {
     let example_config = Config {
         filter: FilterConfig {
             exclude_repos: vec!["username/spam".to_string()],
