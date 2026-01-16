@@ -17,7 +17,7 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - name: Download Ubuntu binary
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v12
         with:
           workflow: build.yml
           commit: ${{ github.sha }}
@@ -25,7 +25,7 @@ jobs:
           name: gh-log-ubuntu-latest
           path: artifacts/gh-log-ubuntu-latest
       - name: Download macOS binary
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v12
         with:
           workflow: build.yml
           commit: ${{ github.sha }}
@@ -33,7 +33,7 @@ jobs:
           name: gh-log-macos-latest
           path: artifacts/gh-log-macos-latest
       - name: Download Windows binary
-        uses: dawidd6/action-download-artifact@v6
+        uses: dawidd6/action-download-artifact@v12
         with:
           workflow: build.yml
           commit: ${{ github.sha }}
