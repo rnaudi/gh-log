@@ -40,7 +40,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: gh-log-${{ matrix.os }}
           path: target/release/${{ matrix.binary }}
