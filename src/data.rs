@@ -105,12 +105,30 @@ pub struct PRDetail {
 
 impl PRDetail {
     pub fn size(&self, size_config: &SizeConfig) -> PRSize {
-        compute_pr_size(
-            self.additions,
-            self.deletions,
-            self.changed_files,
-            size_config,
-        )
+        let additions = self.additions;
+        let deletions = self.deletions;
+        let changed_files = self.changed_files;
+        let total_lines = additions + deletions;
+        if changed_files >= 25 {
+            return PRSize::XL;
+        }
+
+        if changed_files >= 15 {
+            if total_lines > size_config.large {
+                return PRSize::XL;
+            }
+            return PRSize::L;
+        }
+
+        if total_lines <= size_config.small {
+            PRSize::S
+        } else if total_lines <= size_config.medium {
+            PRSize::M
+        } else if total_lines <= size_config.large {
+            PRSize::L
+        } else {
+            PRSize::XL
+        }
     }
 }
 
