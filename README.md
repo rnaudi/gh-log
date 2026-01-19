@@ -43,12 +43,12 @@ curl -L https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-
 Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz)
 
 ### Windows
-Download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-pc-windows-msvc.zip)
-
-Extract and run:
 ```powershell
-gh-log.exe --version
+curl -L https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-pc-windows-msvc.zip -o gh-log.zip; tar -xf gh-log.zip
+.\gh-log.exe --version
 ```
+
+Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-pc-windows-msvc.zip)
 
 **Verify the download (optional but recommended):**
 
