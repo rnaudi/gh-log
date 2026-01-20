@@ -17,31 +17,66 @@ jobs:
     name: Run CI
     uses: ./.github/workflows/ci.yml
 
-  build:
-    name: Build
+  build-linux-musl:
+    name: Build Linux (musl)
     needs: ci
-    strategy:
-      matrix:
-        include:
-          - os: ubuntu-latest
-            binary: gh-log
-          - os: macos-latest
-            binary: gh-log
-          - os: windows-latest
-            binary: gh-log.exe
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-unknown-linux-musl
+      - name: Install musl tools
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build-linux-musl"
+          cache-on-failure: true
+      - name: Build release binary
+        run: cargo build --release --locked --target x86_64-unknown-linux-musl
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gh-log-linux-musl-latest
+          path: target/x86_64-unknown-linux-musl/release/gh-log
+          retention-days: 7
+
+  build-macos:
+    name: Build macOS
+    needs: ci
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "build-${{ matrix.os }}"
+          shared-key: "build-macos"
           cache-on-failure: true
       - name: Build release binary
         run: cargo build --release --locked
       - name: Upload artifact
         uses: actions/upload-artifact@v6
         with:
-          name: gh-log-${{ matrix.os }}
-          path: target/release/${{ matrix.binary }}
+          name: gh-log-macos-latest
+          path: target/release/gh-log
+          retention-days: 7
+
+  build-windows:
+    name: Build Windows
+    needs: ci
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "build-windows"
+          cache-on-failure: true
+      - name: Build release binary
+        run: cargo build --release --locked
+      - name: Upload artifact
+        uses: actions/upload-artifact@v6
+        with:
+          name: gh-log-windows-latest
+          path: target/release/gh-log.exe
           retention-days: 7
