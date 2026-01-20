@@ -13,6 +13,18 @@ NAVIGATION:
   ↑↓ or j/k - Scroll up/down
   q or Esc  - Quit
 
+EXAMPLES:
+  gh-log view                     # Current month interactive view
+  gh-log view --month 2025-12     # View December 2025 data
+  gh-log view --month 2024-01     # View old data (cached permanently)
+  gh-log view --force             # Bypass cache, fetch fresh from GitHub
+
+USE CASES:
+  - Quick overview of your monthly PRs
+  - Identify weeks with high/low activity
+  - Find PRs with longest lead times
+  - Check which repos you contributed to most
+
 Usage: gh-log view [OPTIONS]
 
 Options:
