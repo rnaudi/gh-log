@@ -19,7 +19,19 @@ VIEWS:
 
 NAVIGATION:
   ↑↓ or j/k - Scroll up/down
-  q or Esc  - Quit"
+  q or Esc  - Quit
+
+EXAMPLES:
+  gh-log view                     # Current month interactive view
+  gh-log view --month 2025-12     # View December 2025 data
+  gh-log view --month 2024-01     # View old data (cached permanently)
+  gh-log view --force             # Bypass cache, fetch fresh from GitHub
+
+USE CASES:
+  - Quick overview of your monthly PRs
+  - Identify weeks with high/low activity
+  - Find PRs with longest lead times
+  - Check which repos you contributed to most"
 }
 
 fn print_help() -> &'static str {
@@ -31,9 +43,24 @@ FORMATS:
   --csv     - CSV format (import to spreadsheet)
 
 EXAMPLES:
-  gh-log print | pbcopy
-  gh-log print --json | claude 'summarize'
-  gh-log print --csv > prs-2025-01.csv"
+  # Performance reviews - copy to clipboard
+  gh-log print | pbcopy                    # macOS
+  gh-log print | xclip -selection c        # Linux
+  gh-log print | clip                      # Windows
+
+  # Let AI write your review
+  gh-log print --json | claude 'Summarize into 3 key accomplishments'
+  gh-log print --json > review.json && gpt-4 review.json
+
+  # Export to spreadsheet
+  gh-log print --csv > prs-2025-01.csv
+  gh-log print --csv --month 2024-12 > last-month.csv
+
+  # Historical analysis
+  gh-log print --month 2024-01 --json | jq '.total_prs'
+
+  # Force fresh data (bypass cache)
+  gh-log print --force --json"
 }
 
 fn config_help() -> &'static str {
@@ -102,7 +129,20 @@ PATHS:
   Config:
     macOS:   ~/Library/Application Support/gh-log/config.toml
     Linux:   ~/.config/gh-log/config.toml
-    Windows: %APPDATA%\\gh-log\\config.toml"
+    Windows: %APPDATA%\\gh-log\\config.toml
+
+EXAMPLES:
+  gh-log doctor                   # Run diagnostics
+
+TROUBLESHOOTING:
+  Problem: 'gh not found'
+  → Install GitHub CLI: https://cli.github.com/
+
+  Problem: 'not authenticated'
+  → Run: gh auth login
+
+  Problem: Stale data showing
+  → Check cache timestamps, use --force to refresh"
 }
 
 #[derive(Parser)]

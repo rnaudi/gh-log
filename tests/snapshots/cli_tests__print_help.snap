@@ -10,9 +10,24 @@ FORMATS:
   --csv     - CSV format (import to spreadsheet)
 
 EXAMPLES:
-  gh-log print | pbcopy
-  gh-log print --json | claude 'summarize'
+  # Performance reviews - copy to clipboard
+  gh-log print | pbcopy                    # macOS
+  gh-log print | xclip -selection c        # Linux
+  gh-log print | clip                      # Windows
+
+  # Let AI write your review
+  gh-log print --json | claude 'Summarize into 3 key accomplishments'
+  gh-log print --json > review.json && gpt-4 review.json
+
+  # Export to spreadsheet
   gh-log print --csv > prs-2025-01.csv
+  gh-log print --csv --month 2024-12 > last-month.csv
+
+  # Historical analysis
+  gh-log print --month 2024-01 --json | jq '.total_prs'
+
+  # Force fresh data (bypass cache)
+  gh-log print --force --json
 
 Usage: gh-log print [OPTIONS]
 
