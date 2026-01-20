@@ -67,6 +67,19 @@ tar xzf gh-log-x86_64-unknown-linux-musl.tar.gz
 ./gh-log --version
 ```
 
+## Shell Completion (Optional)
+
+Tab completion is available for: **bash**, **zsh**, **fish**, **powershell**, **elvish**
+
+```bash
+gh-log completions --help  # Detailed instructions for all shells
+```
+
+Quick example for zsh:
+```bash
+gh-log completions zsh > ~/.zsh/completions/_gh-log
+```
+
 ## Common Use Cases
 
 **Interactive view:**

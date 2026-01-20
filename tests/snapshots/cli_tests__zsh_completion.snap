@@ -1,0 +1,201 @@
+---
+source: tests/cli_tests.rs
+expression: stdout
+---
+#compdef gh-log
+
+autoload -U is-at-least
+
+_gh-log() {
+    typeset -A opt_args
+    typeset -a _arguments_options
+    local ret=1
+
+    if is-at-least 5.2; then
+        _arguments_options=(-s -S -C)
+    else
+        _arguments_options=(-s -C)
+    fi
+
+    local context curcontext="$curcontext" state line
+    _arguments "${_arguments_options[@]}" : \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+'-V[Print version]' \
+'--version[Print version]' \
+":: :_gh-log_commands" \
+"*::: :->gh-log" \
+&& ret=0
+    case $state in
+    (gh-log)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:gh-log-command-$line[1]:"
+        case $line[1] in
+            (view)
+_arguments "${_arguments_options[@]}" : \
+'--month=[Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)]:YYYY-MM:_default' \
+'--force[Force refresh data from GitHub API, bypassing cache]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(print)
+_arguments "${_arguments_options[@]}" : \
+'--month=[Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)]:YYYY-MM:_default' \
+'--force[Force refresh data from GitHub API, bypassing cache]' \
+'--json[Output data in JSON format]' \
+'--csv[Output data in CSV format]' \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+'-h[Print help (see more with '\''--help'\'')]' \
+'--help[Print help (see more with '\''--help'\'')]' \
+':shell -- Shell to generate completions for:(bash elvish fish powershell zsh)' \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+":: :_gh-log__help_commands" \
+"*::: :->help" \
+&& ret=0
+
+    case $state in
+    (help)
+        words=($line[1] "${words[@]}")
+        (( CURRENT += 1 ))
+        curcontext="${curcontext%:*:*}:gh-log-help-command-$line[1]:"
+        case $line[1] in
+            (view)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(print)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(config)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(doctor)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(completions)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+(help)
+_arguments "${_arguments_options[@]}" : \
+&& ret=0
+;;
+        esac
+    ;;
+esac
+;;
+        esac
+    ;;
+esac
+}
+
+(( $+functions[_gh-log_commands] )) ||
+_gh-log_commands() {
+    local commands; commands=(
+'view:Interactive TUI - press '\''s'\'' summary, '\''d'\'' detail (cycles by week/repo), '\''t'\'' tail, '\''q'\'' quit' \
+'print:Print PRs as text/json/csv - pipe to LLMs, clipboard, or files' \
+'config:Create/edit config - exclude/ignore repos, customize PR size thresholds' \
+'doctor:Verify GitHub CLI (gh) is installed and show cache/config paths' \
+'completions:Generate shell completion scripts for your shell' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'gh-log commands' commands "$@"
+}
+(( $+functions[_gh-log__completions_commands] )) ||
+_gh-log__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log completions commands' commands "$@"
+}
+(( $+functions[_gh-log__config_commands] )) ||
+_gh-log__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log config commands' commands "$@"
+}
+(( $+functions[_gh-log__doctor_commands] )) ||
+_gh-log__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log doctor commands' commands "$@"
+}
+(( $+functions[_gh-log__help_commands] )) ||
+_gh-log__help_commands() {
+    local commands; commands=(
+'view:Interactive TUI - press '\''s'\'' summary, '\''d'\'' detail (cycles by week/repo), '\''t'\'' tail, '\''q'\'' quit' \
+'print:Print PRs as text/json/csv - pipe to LLMs, clipboard, or files' \
+'config:Create/edit config - exclude/ignore repos, customize PR size thresholds' \
+'doctor:Verify GitHub CLI (gh) is installed and show cache/config paths' \
+'completions:Generate shell completion scripts for your shell' \
+'help:Print this message or the help of the given subcommand(s)' \
+    )
+    _describe -t commands 'gh-log help commands' commands "$@"
+}
+(( $+functions[_gh-log__help__completions_commands] )) ||
+_gh-log__help__completions_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help completions commands' commands "$@"
+}
+(( $+functions[_gh-log__help__config_commands] )) ||
+_gh-log__help__config_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help config commands' commands "$@"
+}
+(( $+functions[_gh-log__help__doctor_commands] )) ||
+_gh-log__help__doctor_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help doctor commands' commands "$@"
+}
+(( $+functions[_gh-log__help__help_commands] )) ||
+_gh-log__help__help_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help help commands' commands "$@"
+}
+(( $+functions[_gh-log__help__print_commands] )) ||
+_gh-log__help__print_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help print commands' commands "$@"
+}
+(( $+functions[_gh-log__help__view_commands] )) ||
+_gh-log__help__view_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log help view commands' commands "$@"
+}
+(( $+functions[_gh-log__print_commands] )) ||
+_gh-log__print_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log print commands' commands "$@"
+}
+(( $+functions[_gh-log__view_commands] )) ||
+_gh-log__view_commands() {
+    local commands; commands=()
+    _describe -t commands 'gh-log view commands' commands "$@"
+}
+
+if [ "$funcstack[1]" = "_gh-log" ]; then
+    _gh-log "$@"
+else
+    compdef _gh-log gh-log
+fi
