@@ -1,0 +1,8 @@
+---
+source: tests/cli_tests.rs
+expression: stderr
+---
+error: invalid value 'invalid-shell' for '<SHELL>'
+  [possible values: bash, elvish, fish, powershell, zsh]
+
+For more information, try '--help'.

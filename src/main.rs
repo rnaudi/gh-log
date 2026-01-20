@@ -5,7 +5,9 @@ mod github;
 mod view;
 
 use anyhow::bail;
-use clap::{Parser, Subcommand};
+use clap::{CommandFactory, Parser, Subcommand};
+use clap_complete::{Shell, generate};
+use std::io;
 use std::process::Command;
 
 // Helper functions for CLI help text
@@ -109,6 +111,107 @@ NOTES:
   - Size = additions + deletions + file count heuristic"
 }
 
+fn completions_help() -> &'static str {
+    "Generate tab-completion scripts for your shell.
+
+The script is output on `stdout`, allowing you to redirect the output to
+the file of your choosing. Where you place the file will depend on which
+shell, and which operating system you are using. Your particular
+configuration may also determine where these scripts need to be placed.
+
+Here are some common setups for the supported shells under Unix and
+similar operating systems (such as GNU/Linux).
+
+BASH:
+
+Completion files are commonly stored in `/etc/bash_completion.d/` for
+system-wide commands, but can be stored in
+`~/.local/share/bash-completion/completions` for user-specific commands.
+
+Run the command:
+
+    $ mkdir -p ~/.local/share/bash-completion/completions
+    $ gh-log completions bash > ~/.local/share/bash-completion/completions/gh-log
+
+This installs the completion script. You may have to log out and log
+back in to your shell session for the changes to take effect.
+
+BASH (macOS/Homebrew):
+
+Homebrew stores bash completion files within the Homebrew directory.
+With the `bash-completion` brew formula installed, run the command:
+
+    $ mkdir -p $(brew --prefix)/etc/bash_completion.d
+    $ gh-log completions bash > $(brew --prefix)/etc/bash_completion.d/gh-log
+
+ZSH:
+
+ZSH completions are commonly stored in any directory listed in your
+`$fpath` variable. To use these completions, you must either add the
+generated script to one of those directories, or add your own to this list.
+
+Adding a custom directory is often the safest bet if you are unsure of
+which directory to use. First create the directory; for this example
+we'll create a hidden directory inside our `$HOME` directory:
+
+    $ mkdir -p ~/.zsh/completions
+
+Then add the following lines to your `.zshrc` just before `compinit`:
+
+    fpath=(~/.zsh/completions $fpath)
+
+Now you can install the completions script using the following command:
+
+    $ gh-log completions zsh > ~/.zsh/completions/_gh-log
+
+You must then restart your shell or run:
+
+    $ exec zsh
+
+for the new completions to take effect.
+
+FISH:
+
+Fish completion files are commonly stored in
+`$HOME/.config/fish/completions`. Run the command:
+
+    $ mkdir -p ~/.config/fish/completions
+    $ gh-log completions fish > ~/.config/fish/completions/gh-log.fish
+
+This installs the completion script. You may have to log out and log
+back in to your shell session for the changes to take effect.
+
+POWERSHELL:
+
+The PowerShell completion scripts require PowerShell v5.0+ (which comes
+with Windows 10, but can be downloaded separately for Windows 7 or 8.1).
+
+First, check if a profile has already been set:
+
+    PS C:\\> Test-Path $profile
+
+If the above command returns `False` run the following:
+
+    PS C:\\> New-Item -path $profile -type file -force
+
+Now open the file provided by `$profile` (if you used the `New-Item`
+command it will be
+`${env:USERPROFILE}\\Documents\\WindowsPowerShell\\Microsoft.PowerShell_profile.ps1`)
+
+Next, we either save the completions file into our profile, or into a
+separate file and source it inside our profile. To save the completions
+into our profile simply use:
+
+    PS C:\\> gh-log completions powershell >> $profile
+
+CUSTOM LOCATIONS:
+
+Alternatively, you could save these files to the place of your choosing,
+such as a custom directory inside your $HOME. Doing so will require you
+to add the proper directives, such as `source`ing inside your login
+script. Consult your shell's documentation for how to add such directives."
+}
+
 fn doctor_help() -> &'static str {
     "Verify system setup and show diagnostic information.
 
@@ -206,6 +309,13 @@ enum Commands {
     #[command(long_about = doctor_help())]
     #[command(name = "doctor")]
     Doctor,
+    /// Generate shell completion scripts for your shell
+    #[command(long_about = completions_help())]
+    Completions {
+        /// Shell to generate completions for
+        #[arg(value_enum)]
+        shell: Shell,
+    },
 }
 
 fn parser_month(s: &str) -> anyhow::Result<String> {
@@ -381,5 +491,10 @@ fn main() -> anyhow::Result<()> {
         }
         Commands::Doctor => run_doctor(),
         Commands::Config => run_config(),
+        Commands::Completions { shell } => {
+            let mut cmd = Cli::command();
+            generate(shell, &mut cmd, "gh-log", &mut io::stdout());
+            Ok(())
+        }
     }
 }
