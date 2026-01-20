@@ -10,7 +10,7 @@ use ratatui::{
         terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
     },
     layout::{Constraint, Layout, Margin, Rect},
-    style::{Color, Style, Stylize},
+    style::{Color, Style},
     text::{Line, Span},
     widgets::{Block, Borders, Paragraph, Scrollbar, ScrollbarOrientation, ScrollbarState},
 };
@@ -233,7 +233,7 @@ fn render_summary(
             Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .areas(frame.size());
+        .areas(frame.area());
 
         render_controls(frame, controls_area, View::Summary);
         render_summary_header(frame, summary_area, data);
@@ -258,7 +258,7 @@ fn render_detail(
             Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .areas(frame.size());
+        .areas(frame.area());
 
         render_controls(frame, controls_area, View::Detail(mode));
         render_detail_header(frame, summary_area, data, mode);
@@ -289,7 +289,7 @@ fn render_tail(
             Constraint::Length(3),
             Constraint::Min(0),
         ])
-        .areas(frame.size());
+        .areas(frame.area());
 
         render_controls(frame, controls_area, View::Tail);
         render_summary_header(frame, summary_area, data);
