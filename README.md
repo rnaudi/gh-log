@@ -36,11 +36,11 @@ Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/late
 
 ### Linux / Unix
 ```bash
-curl -L https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz | tar xz
+curl -L https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-musl.tar.gz | tar xz
 ./gh-log --version
 ```
 
-Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz)
+Or download from [Latest release](https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-musl.tar.gz)
 
 ### Windows
 ```powershell
@@ -56,14 +56,14 @@ Example for linux:
 
 ```bash
 # Download the binary and checksum
-curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz
-curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
+curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-musl.tar.gz
+curl -LO https://github.com/rnaudi/gh-log/releases/latest/download/gh-log-x86_64-unknown-linux-musl.tar.gz.sha256
 
 # Verify the checksum
-sha256sum -c gh-log-x86_64-unknown-linux-gnu.tar.gz.sha256
+sha256sum -c gh-log-x86_64-unknown-linux-musl.tar.gz.sha256
 
 # If OK, extract
-tar xzf gh-log-x86_64-unknown-linux-gnu.tar.gz
+tar xzf gh-log-x86_64-unknown-linux-musl.tar.gz
 ./gh-log --version
 ```
 
