@@ -566,42 +566,53 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
         .saturating_sub((HORIZONTAL_MARGIN * 2) as usize)
         .saturating_sub(SCROLLBAR_SPACE as usize);
 
-    let mut lines = Vec::new();
+    let week_date_width = usable_width.saturating_sub(53).max(12);
 
+    let mut lines = Vec::new();
     lines.push(
         Line::from(separator_line("Weeks", usable_width)).style(Style::default().fg(Color::Gray)),
     );
     for week in &data.weeks {
-        lines.push(Line::from(vec![
-            Span::raw("Week "),
-            Span::styled(week.week_num.to_string(), Style::default().bold()),
+        let mut spans = vec![
+            Span::raw(format!("Week {:2}", week.week_num)),
+            Span::raw(" │ "),
             Span::raw(format!(
-                " ({:12}) │ ",
-                format_date_range_short(week.week_start, week.week_end)
+                "{:width$}",
+                format_date_range_short(week.week_start, week.week_end),
+                width = week_date_width
             )),
+            Span::raw(" │ "),
             Span::styled(
                 format!("{:2}", week.pr_count),
                 Style::default().fg(Color::Green),
             ),
             Span::raw(" PRs │ Avg: "),
             Span::styled(
-                format_duration(week.avg_lead_time),
+                format!("{:8}", format_duration(week.avg_lead_time)),
                 Style::default().fg(Color::Yellow),
             ),
-        ]));
+            Span::raw(" │ "),
+        ];
+        spans.extend(size_distribution_colored(
+            week.size_s,
+            week.size_m,
+            week.size_l,
+            week.size_xl,
+        ));
+        lines.push(Line::from(spans));
     }
     for _ in 0..SECTION_SPACING {
         lines.push(Line::from(""));
     }
 
-    // Repositories section - dynamic width
-    let repo_name_width = (usable_width.saturating_sub(30)).max(20);
+    let repo_name_width = usable_width.saturating_sub(43).max(20);
+
     lines.push(
         Line::from(separator_line("Repositories", usable_width))
             .style(Style::default().fg(Color::Gray)),
     );
     for repo in &data.repos {
-        lines.push(Line::from(vec![
+        let mut spans = vec![
             Span::styled(
                 format!(
                     "{:width$}",
@@ -621,15 +632,21 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
                 Style::default().fg(Color::Yellow),
             ),
             Span::raw(" │ "),
-            Span::raw(repo.format_size_distribution()),
-        ]));
+        ];
+        spans.extend(size_distribution_colored(
+            repo.size_s,
+            repo.size_m,
+            repo.size_l,
+            repo.size_xl,
+        ));
+        lines.push(Line::from(spans));
     }
     for _ in 0..SECTION_SPACING {
         lines.push(Line::from(""));
     }
 
-    // Top Reviewers section - dynamic width
-    let reviewer_name_width = (usable_width.saturating_sub(15)).max(20);
+    let reviewer_name_width = usable_width.saturating_sub(9).max(15);
+
     lines.push(
         Line::from(separator_line("Top Reviewers", usable_width))
             .style(Style::default().fg(Color::Gray)),
@@ -643,7 +660,7 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
             )),
             Span::raw(" │ "),
             Span::styled(
-                format!("{}", reviewer.pr_count),
+                format!("{:2}", reviewer.pr_count),
                 Style::default().fg(Color::Green),
             ),
             Span::raw(" PRs"),
@@ -938,6 +955,23 @@ fn truncate(s: &str, max_len: usize) -> String {
     }
 }
 
+fn size_distribution_colored(
+    size_s: usize,
+    size_m: usize,
+    size_l: usize,
+    size_xl: usize,
+) -> Vec<Span<'static>> {
+    vec![
+        Span::styled(format!("{:2}S", size_s), Style::default().fg(Color::Green)),
+        Span::raw(" "),
+        Span::styled(format!("{:2}M", size_m), Style::default().fg(Color::Blue)),
+        Span::raw(" "),
+        Span::styled(format!("{:2}L", size_l), Style::default().fg(Color::Yellow)),
+        Span::raw(" "),
+        Span::styled(format!("{:2}XL", size_xl), Style::default().fg(Color::Red)),
+    ]
+}
+
 pub fn print_json(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Result<()> {
     use serde::Serialize;
 
@@ -1208,6 +1242,10 @@ mod tests {
                 week_end,
                 pr_count: 2,
                 avg_lead_time: chrono::Duration::hours(2),
+                size_s: 1,
+                size_m: 1,
+                size_l: 0,
+                size_xl: 0,
             }],
             repos: vec![data::RepoData {
                 name: "test/repo".to_string(),

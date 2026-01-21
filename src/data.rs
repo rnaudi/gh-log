@@ -62,6 +62,10 @@ pub struct WeekData {
     pub week_end: DateTime<Utc>,
     pub pr_count: usize,
     pub avg_lead_time: Duration,
+    pub size_s: usize,
+    pub size_m: usize,
+    pub size_l: usize,
+    pub size_xl: usize,
 }
 
 #[derive(Debug)]
@@ -244,7 +248,7 @@ pub fn build_month_data(
     let avg_lead_time = avg_duration(&pr_data.iter().map(|pr| pr.lead_time).collect::<Vec<_>>());
     let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
     let frequency = pr_data.len() as f64 / (time_span_days / 7.0).max(1.0);
-    let week_data = build_week_data(&by_week);
+    let week_data = build_week_data(&by_week, cfg);
     let pr_details_by_week = build_pr_details_by_week(&by_week);
     let repos = build_repo_data(&by_repo, cfg);
     let (size_s, size_m, size_l, size_xl) = compute_size_counts(&pr_data, cfg);
@@ -317,18 +321,26 @@ fn group_prs_by_repo(pr_data: &[PRData]) -> BTreeMap<String, Vec<PRData>> {
     by_repo
 }
 
-fn build_week_data(weeks: &[(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)]) -> Vec<WeekData> {
+fn build_week_data(
+    weeks: &[(DateTime<Utc>, DateTime<Utc>, Vec<PRData>)],
+    cfg: &Config,
+) -> Vec<WeekData> {
     weeks
         .iter()
         .enumerate()
         .map(|(i, (start, end, prs))| {
             let lead_times: Vec<Duration> = prs.iter().map(|pr| pr.lead_time).collect();
+            let (size_s, size_m, size_l, size_xl) = compute_size_counts(prs, cfg);
             WeekData {
                 week_num: i + 1,
                 week_start: *start,
                 week_end: *end,
                 pr_count: prs.len(),
                 avg_lead_time: avg_duration(&lead_times),
+                size_s,
+                size_m,
+                size_l,
+                size_xl,
             }
         })
         .collect()
