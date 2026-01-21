@@ -4,26 +4,28 @@ expression: stdout
 ---
 Navigate PRs with an interactive terminal UI.
 
-VIEWS:
-  s - Summary (weekly & repo stats)
-  d - Detail (cycle: by week ↔ by repo)
-  t - Tail (all PRs sorted by lead time)
+Discussion:
+    Launch an interactive TUI to browse your PRs. The interface has three
+    views that you can toggle between:
 
-NAVIGATION:
-  ↑↓ or j/k - Scroll up/down
-  q or Esc  - Quit
+    - Summary (s): Weekly and repo statistics
+    - Detail (d): Detailed list, cycle between grouped by week or by repo
+    - Tail (t): All PRs sorted by lead time (longest first)
 
-EXAMPLES:
-  gh-log view                     # Current month interactive view
-  gh-log view --month 2025-12     # View December 2025 data
-  gh-log view --month 2024-01     # View old data (cached permanently)
-  gh-log view --force             # Bypass cache, fetch fresh from GitHub
+    Use arrow keys or j/k to scroll, q or Esc to quit.
 
-USE CASES:
-  - Quick overview of your monthly PRs
-  - Identify weeks with high/low activity
-  - Find PRs with longest lead times
-  - Check which repos you contributed to most
+    Data is cached after the first fetch. Use --force to bypass cache and
+    fetch fresh data from GitHub.
+
+Examples:
+    # View current month
+    gh-log view
+
+    # View a specific month
+    gh-log view --month 2025-12
+
+    # Force fresh data (bypass cache)
+    gh-log view --force
 
 Usage: gh-log view [OPTIONS]
 

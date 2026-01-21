@@ -14,101 +14,97 @@ use std::process::Command;
 fn view_help() -> &'static str {
     "Navigate PRs with an interactive terminal UI.
 
-VIEWS:
-  s - Summary (weekly & repo stats)
-  d - Detail (cycle: by week ↔ by repo)
-  t - Tail (all PRs sorted by lead time)
+Discussion:
+    Launch an interactive TUI to browse your PRs. The interface has three
+    views that you can toggle between:
 
-NAVIGATION:
-  ↑↓ or j/k - Scroll up/down
-  q or Esc  - Quit
+    - Summary (s): Weekly and repo statistics
+    - Detail (d): Detailed list, cycle between grouped by week or by repo
+    - Tail (t): All PRs sorted by lead time (longest first)
 
-EXAMPLES:
-  gh-log view                     # Current month interactive view
-  gh-log view --month 2025-12     # View December 2025 data
-  gh-log view --month 2024-01     # View old data (cached permanently)
-  gh-log view --force             # Bypass cache, fetch fresh from GitHub
+    Use arrow keys or j/k to scroll, q or Esc to quit.
 
-USE CASES:
-  - Quick overview of your monthly PRs
-  - Identify weeks with high/low activity
-  - Find PRs with longest lead times
-  - Check which repos you contributed to most"
+    Data is cached after the first fetch. Use --force to bypass cache and
+    fetch fresh data from GitHub.
+
+Examples:
+    # View current month
+    gh-log view
+
+    # View a specific month
+    gh-log view --month 2025-12
+
+    # Force fresh data (bypass cache)
+    gh-log view --force"
 }
 
 fn print_help() -> &'static str {
     "Output PR data to terminal or pipe to other tools.
 
-FORMATS:
-  (default) - Human-readable with PR descriptions
-  --json    - JSON format (great for LLMs/scripts)
-  --csv     - CSV format (import to spreadsheet)
+Discussion:
+    Print PR data in various formats for different use cases:
 
-EXAMPLES:
-  # Performance reviews - copy to clipboard
-  gh-log print | pbcopy                    # macOS
-  gh-log print | xclip -selection c        # Linux
-  gh-log print | clip                      # Windows
+    - Default: Human-readable text with PR descriptions
+    - --json: Structured data for LLMs, scripts, or further processing
+    - --csv: Spreadsheet-compatible format
 
-  # Let AI write your review
-  gh-log print --json | claude 'Summarize into 3 key accomplishments'
-  gh-log print --json > review.json && gpt-4 review.json
+    This is particularly useful for performance reviews - pipe the output
+    to your clipboard, feed it to an LLM, or export to a spreadsheet.
 
-  # Export to spreadsheet
-  gh-log print --csv > prs-2025-01.csv
-  gh-log print --csv --month 2024-12 > last-month.csv
+    Data is cached after the first fetch. Use --force to bypass cache.
 
-  # Historical analysis
-  gh-log print --month 2024-01 --json | jq '.total_prs'
+Examples:
+    # Copy to clipboard for performance review
+    gh-log print | pbcopy                    # macOS
+    gh-log print | xclip -selection c        # Linux
 
-  # Force fresh data (bypass cache)
-  gh-log print --force --json"
+    # Let AI write your review
+    gh-log print --json | claude 'Summarize into 3 key accomplishments'
+
+    # Export to spreadsheet
+    gh-log print --csv > prs-2025-01.csv
+
+    # Specific month with fresh data
+    gh-log print --month 2024-12 --force --json"
 }
 
 fn config_help() -> &'static str {
-    "Create/edit configuration file to customize filtering and PR size thresholds.
+    "Create or edit the configuration file.
 
-LOCATION:
-  macOS:   ~/Library/Application Support/gh-log/config.toml
-  Linux:   ~/.config/gh-log/config.toml
-  Windows: %APPDATA%\\gh-log\\config.toml
+Discussion:
+    Opens the configuration file in your default editor (via $EDITOR or $VISUAL).
+    If the file doesn't exist, a template will be created.
 
-CONFIGURATION OPTIONS:
+    Configuration allows you to:
+    - Exclude repos/PRs completely (won't be shown)
+    - Ignore repos/PRs (shown but not counted in metrics)
+    - Customize PR size thresholds (S/M/L/XL)
 
-[filter]
-  exclude_repos    - Hide repos completely (not shown anywhere)
-  exclude_patterns - Hide PRs matching regex (e.g., \"^test:\", \"^wip:\")
-  ignore_repos     - Show but don't count in metrics
-  ignore_patterns  - Show but don't count in metrics (e.g., \"^docs:\", \"^meeting:\")
+    Patterns use regex syntax and are applied to PR titles.
 
-[size]
-  small  - Max lines for S size (default: 50)
-  medium - Max lines for M size (default: 200)
-  large  - Max lines for L size (default: 500)
-  (XL = anything above large threshold)
+    If a repo appears in both exclude and ignore lists, it gets excluded.
 
-PATTERN SYNTAX:
-  Uses regex syntax. Common patterns:
-    ^prefix:        - Matches PR titles starting with \"prefix:\"
-    (?i)keyword     - Case-insensitive match
-    (foo|bar)       - Match either foo or bar
+Config location:
+    macOS:   ~/Library/Application Support/gh-log/config.toml
+    Linux:   ~/.config/gh-log/config.toml
+    Windows: %APPDATA%\\gh-log\\config.toml
 
-EXAMPLE CONFIG:
-  [filter]
-  exclude_repos = [\"username/spam-repo\"]
-  exclude_patterns = [\"^test:\", \"^tmp:\", \"^wip:\"]
-  ignore_repos = [\"username/personal-notes\"]
-  ignore_patterns = [\"^docs:\", \"^meeting:\", \"^review:\"]
+Example configuration:
+    [filter]
+    exclude_repos = [\"username/spam-repo\"]
+    exclude_patterns = [\"^test:\", \"^tmp:\"]
+    ignore_repos = [\"username/personal-notes\"]
+    ignore_patterns = [\"^docs:\", \"^meeting:\"]
 
-  [size]
-  small = 50
-  medium = 200
-  large = 500
+    [size]
+    small = 50
+    medium = 200
+    large = 500
 
-NOTES:
-  - If a repo is both excluded and ignored, it gets excluded
-  - Patterns are applied to PR titles
-  - Size = additions + deletions + file count heuristic"
+Common regex patterns:
+    ^prefix:     Match titles starting with \"prefix:\"
+    (?i)keyword  Case-insensitive match
+    (foo|bar)    Match either foo or bar"
 }
 
 fn completions_help() -> &'static str {
@@ -215,37 +211,29 @@ script. Consult your shell's documentation for how to add such directives."
 fn doctor_help() -> &'static str {
     "Verify system setup and show diagnostic information.
 
-CHECKS:
-  - GitHub CLI (gh) installation and version
-  - Authentication status
+Discussion:
+    Runs a series of checks to verify that gh-log is properly configured
+    and can communicate with GitHub.
 
-DISPLAYS:
-  - Cache directory location and contents
-  - Configuration file location and status
+    Checks performed:
+    - GitHub CLI (gh) installation and version
+    - GitHub authentication status
 
-PATHS:
-  Cache:
-    macOS:   ~/Library/Caches/gh-log/
-    Linux:   ~/.cache/gh-log/
-    Windows: %LOCALAPPDATA%\\gh-log\\cache\\
+    Also displays the locations of:
+    - Cache directory (where PR data is stored)
+    - Configuration file (if it exists)
 
-  Config:
-    macOS:   ~/Library/Application Support/gh-log/config.toml
-    Linux:   ~/.config/gh-log/config.toml
-    Windows: %APPDATA%\\gh-log\\config.toml
+    Use this command to troubleshoot issues or find where your data is stored.
 
-EXAMPLES:
-  gh-log doctor                   # Run diagnostics
+Common issues:
+    'gh not found'
+    → Install GitHub CLI: https://cli.github.com/
 
-TROUBLESHOOTING:
-  Problem: 'gh not found'
-  → Install GitHub CLI: https://cli.github.com/
+    'not authenticated'
+    → Run: gh auth login
 
-  Problem: 'not authenticated'
-  → Run: gh auth login
-
-  Problem: Stale data showing
-  → Check cache timestamps, use --force to refresh"
+    Stale data showing
+    → Use --force flag with view/print commands to refresh"
 }
 
 #[derive(Parser)]
