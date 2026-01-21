@@ -2,7 +2,11 @@
 
 GitHub PR analytics for your terminal.
 
-<img width="1548" height="2086" alt="carbon" src="https://github.com/user-attachments/assets/de17a0ea-c096-470e-8f23-692d99eecb2e" />
+<img width="1079" height="698" alt="Screenshot 2026-01-21 at 17 55 46" src="https://github.com/user-attachments/assets/ce01387a-c6ea-48fb-9b1b-78111f97f184" />
+<img width="1079" height="698" alt="Screenshot 2026-01-21 at 17 55 50" src="https://github.com/user-attachments/assets/72dfc228-cb97-441c-b8a5-3c522dacd9f8" />
+<img width="1079" height="698" alt="Screenshot 2026-01-21 at 17 55 53" src="https://github.com/user-attachments/assets/2df1343e-565a-4526-810b-2dc4f760e9b5" />
+<img width="1079" height="698" alt="Screenshot 2026-01-21 at 17 55 59" src="https://github.com/user-attachments/assets/334743ef-ca67-4a00-a61b-3c3e33718086" />
+
 
 
 ## Why?
