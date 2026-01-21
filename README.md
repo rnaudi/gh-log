@@ -87,6 +87,8 @@ gh-log completions zsh > ~/.zsh/completions/_gh-log
 gh-log view  
 ```
 
+Supports vim navigation: arrows, j/k (line), Ctrl-D/U (page), Ctrl-F/B (full page), g/G (top/bottom)
+
 **Performance reviews:**
 ```bash
 gh-log print --json | claude "Summarize into 3 key accomplishments"

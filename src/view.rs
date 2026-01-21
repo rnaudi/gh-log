@@ -75,6 +75,34 @@ impl ScrollState {
         }
     }
 
+    fn scroll_page_down(&mut self) {
+        let half_page = self.viewport_height / 2;
+        let max = self.max_scroll();
+        self.position = self.position.saturating_add(half_page).min(max);
+    }
+
+    fn scroll_page_up(&mut self) {
+        let half_page = self.viewport_height / 2;
+        self.position = self.position.saturating_sub(half_page);
+    }
+
+    fn scroll_full_page_down(&mut self) {
+        let max = self.max_scroll();
+        self.position = self.position.saturating_add(self.viewport_height).min(max);
+    }
+
+    fn scroll_full_page_up(&mut self) {
+        self.position = self.position.saturating_sub(self.viewport_height);
+    }
+
+    fn scroll_to_top(&mut self) {
+        self.position = 0;
+    }
+
+    fn scroll_to_bottom(&mut self) {
+        self.position = self.max_scroll();
+    }
+
     fn max_scroll(&self) -> usize {
         self.content_height.saturating_sub(self.viewport_height)
     }
@@ -102,6 +130,12 @@ enum Msg {
     ShowTail,
     ScrollUp,
     ScrollDown,
+    ScrollPageDown,
+    ScrollPageUp,
+    ScrollFullPageDown,
+    ScrollFullPageUp,
+    ScrollToTop,
+    ScrollToBottom,
 }
 
 /// Application state - consolidates all mutable state in one place
@@ -138,6 +172,30 @@ impl AppState {
     fn scroll_down(&mut self) {
         self.scroll.scroll_down();
     }
+
+    fn scroll_page_down(&mut self) {
+        self.scroll.scroll_page_down();
+    }
+
+    fn scroll_page_up(&mut self) {
+        self.scroll.scroll_page_up();
+    }
+
+    fn scroll_full_page_down(&mut self) {
+        self.scroll.scroll_full_page_down();
+    }
+
+    fn scroll_full_page_up(&mut self) {
+        self.scroll.scroll_full_page_up();
+    }
+
+    fn scroll_to_top(&mut self) {
+        self.scroll.scroll_to_top();
+    }
+
+    fn scroll_to_bottom(&mut self) {
+        self.scroll.scroll_to_bottom();
+    }
 }
 
 /// Pure update function - handles state transitions based on messages
@@ -169,22 +227,66 @@ fn update(msg: Msg, mut state: AppState) -> AppState {
             state.scroll_down();
             state
         }
+        Msg::ScrollPageDown => {
+            state.scroll_page_down();
+            state
+        }
+        Msg::ScrollPageUp => {
+            state.scroll_page_up();
+            state
+        }
+        Msg::ScrollFullPageDown => {
+            state.scroll_full_page_down();
+            state
+        }
+        Msg::ScrollFullPageUp => {
+            state.scroll_full_page_up();
+            state
+        }
+        Msg::ScrollToTop => {
+            state.scroll_to_top();
+            state
+        }
+        Msg::ScrollToBottom => {
+            state.scroll_to_bottom();
+            state
+        }
     }
 }
 
 /// Handle keyboard input and convert to messages
 fn handle_input() -> anyhow::Result<Option<Msg>> {
+    use crossterm::event::KeyModifiers;
+
     if event::poll(std::time::Duration::from_millis(100))?
         && let Event::Key(key) = event::read()?
         && key.kind == KeyEventKind::Press
     {
-        let msg = match key.code {
-            KeyCode::Char('q') | KeyCode::Esc => Some(Msg::Quit),
-            KeyCode::Char('s') => Some(Msg::ShowSummary),
-            KeyCode::Char('d') => Some(Msg::ToggleDetail),
-            KeyCode::Char('t') => Some(Msg::ShowTail),
-            KeyCode::Up | KeyCode::Char('k') => Some(Msg::ScrollUp),
-            KeyCode::Down | KeyCode::Char('j') => Some(Msg::ScrollDown),
+        let msg = match (key.code, key.modifiers) {
+            // Quit
+            (KeyCode::Char('q'), _) | (KeyCode::Esc, _) => Some(Msg::Quit),
+
+            // Views
+            (KeyCode::Char('s'), _) => Some(Msg::ShowSummary),
+            (KeyCode::Char('d'), KeyModifiers::NONE) => Some(Msg::ToggleDetail),
+            (KeyCode::Char('t'), _) => Some(Msg::ShowTail),
+
+            // Line by line
+            (KeyCode::Up, _) | (KeyCode::Char('k'), _) => Some(Msg::ScrollUp),
+            (KeyCode::Down, _) | (KeyCode::Char('j'), _) => Some(Msg::ScrollDown),
+
+            // Half page navigation (Ctrl-D, Ctrl-U)
+            (KeyCode::Char('d'), KeyModifiers::CONTROL) => Some(Msg::ScrollPageDown),
+            (KeyCode::Char('u'), KeyModifiers::CONTROL) => Some(Msg::ScrollPageUp),
+
+            // Full page navigation (Ctrl-F, Ctrl-B)
+            (KeyCode::Char('f'), KeyModifiers::CONTROL) => Some(Msg::ScrollFullPageDown),
+            (KeyCode::Char('b'), KeyModifiers::CONTROL) => Some(Msg::ScrollFullPageUp),
+
+            // Jump to top/bottom (g, G)
+            (KeyCode::Char('g'), _) => Some(Msg::ScrollToTop),
+            (KeyCode::Char('G'), _) => Some(Msg::ScrollToBottom),
+
             _ => None,
         };
         return Ok(msg);
@@ -310,15 +412,13 @@ fn render_controls(frame: &mut Frame, area: Rect, current_view: View) {
 
     let controls = Line::from(vec![
         Span::styled("s", Style::default().fg(Color::Gray).bold()),
-        Span::raw(": Summary │ "),
+        Span::raw(":Summary "),
         Span::styled("d", Style::default().fg(Color::Gray).bold()),
-        Span::raw(format!(": {} │ ", detail_label)),
+        Span::raw(format!(":{} ", detail_label)),
         Span::styled("t", Style::default().fg(Color::Gray).bold()),
-        Span::raw(": Tail │ "),
-        Span::styled("↑↓/jk", Style::default().fg(Color::Gray).bold()),
-        Span::raw(": Scroll │ "),
+        Span::raw(":Tail "),
         Span::styled("q", Style::default().fg(Color::Gray).bold()),
-        Span::raw(": Quit"),
+        Span::raw(":Quit"),
     ]);
     let widget = Paragraph::new(controls).block(
         Block::default()
@@ -1294,7 +1394,69 @@ mod tests {
     #[test]
     fn test_msg_derives_eq() {
         assert_eq!(Msg::Quit, Msg::Quit);
-        assert_eq!(Msg::ShowSummary, Msg::ShowSummary);
         assert_ne!(Msg::Quit, Msg::ShowSummary);
+    }
+
+    #[test]
+    fn test_update_scroll_page_down() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+
+        let result = update(Msg::ScrollPageDown, state);
+        assert_eq!(result.scroll.position, 10);
+    }
+
+    #[test]
+    fn test_update_scroll_page_up_from_bottom() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+        state.scroll.position = 80;
+
+        let result = update(Msg::ScrollPageUp, state);
+        assert_eq!(result.scroll.position, 70);
+    }
+
+    #[test]
+    fn test_update_scroll_to_top() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+        state.scroll.position = 50;
+
+        let result = update(Msg::ScrollToTop, state);
+        assert_eq!(result.scroll.position, 0);
+    }
+
+    #[test]
+    fn test_update_scroll_to_bottom() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+
+        let result = update(Msg::ScrollToBottom, state);
+        assert_eq!(result.scroll.position, 80);
+    }
+
+    #[test]
+    fn test_update_scroll_full_page_down() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+
+        let result = update(Msg::ScrollFullPageDown, state);
+        assert_eq!(result.scroll.position, 20);
+    }
+
+    #[test]
+    fn test_update_scroll_full_page_up() {
+        let mut state = AppState::new();
+        state.scroll.set_content_height(100);
+        state.scroll.set_viewport_height(20);
+        state.scroll.position = 50;
+
+        let result = update(Msg::ScrollFullPageUp, state);
+        assert_eq!(result.scroll.position, 30);
     }
 }
