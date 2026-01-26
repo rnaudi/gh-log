@@ -1,3 +1,7 @@
+//! gh-log terminal UI.
+//!
+//! Renders summary, detail, and tail panes for a month via ratatui, using a small message loop to
+//! keep scrolling and view switches predictable.
 use crate::data;
 
 use chrono::{DateTime, Datelike, Duration, Utc};
@@ -294,6 +298,10 @@ fn handle_input() -> anyhow::Result<Option<Msg>> {
     Ok(None)
 }
 
+/// Run the interactive TUI for browsing pull request analytics.
+///
+/// # Errors
+/// Returns an error if terminal initialization or rendering fails.
 pub fn run(month_data: MonthData, cfg: Config) -> anyhow::Result<()> {
     enable_raw_mode()?;
     execute!(stdout(), EnterAlternateScreen)?;
@@ -972,6 +980,19 @@ fn size_distribution_colored(
     ]
 }
 
+/// Render the monthly analytics as JSON for downstream tooling or AI prompts.
+///
+/// # Examples
+/// ```rust,no_run
+/// # use gh_log::{config::SizeConfig, data::MonthData};
+/// # fn run(data: MonthData, sizes: SizeConfig) -> anyhow::Result<()> {
+/// gh_log::view::print_json(&data, &sizes)?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+/// Returns an error if serialization fails or writing to stdout encounters an I/O failure.
 pub fn print_json(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Result<()> {
     use serde::Serialize;
 
@@ -1103,6 +1124,19 @@ pub fn print_json(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Resu
     Ok(())
 }
 
+/// Render the monthly analytics as CSV suitable for spreadsheets or further processing.
+///
+/// # Examples
+/// ```rust,no_run
+/// # use gh_log::{config::SizeConfig, data::MonthData};
+/// # fn run(data: MonthData, sizes: SizeConfig) -> anyhow::Result<()> {
+/// gh_log::view::print_csv(&data, &sizes)?;
+/// # Ok(())
+/// # }
+/// ```
+///
+/// # Errors
+/// Returns an error if writing to stdout encounters an I/O failure.
 pub fn print_csv(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Result<()> {
     println!(
         "created_at,repo,number,title,body,lead_time_hours,size,additions,deletions,changed_files"
@@ -1135,6 +1169,7 @@ pub fn print_csv(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Resul
     Ok(())
 }
 
+/// Render a human-readable summary of the monthly analytics directly to stdout.
 pub fn print_data(data: &data::MonthData, month: &str, size_cfg: &SizeConfig) {
     println!("GitHub PRs for {}", month);
     println!("  - Total PRs: {}", data.total_prs);

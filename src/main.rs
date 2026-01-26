@@ -1,3 +1,35 @@
+//! gh-log: GitHub PR analytics for your terminal.
+//!
+//! # Overview
+//! `gh-log` collects your pull requests through the GitHub CLI and turns them into the metrics you
+//! need for performance reviews, planning, or status updates. This crate is the CLI entry point that
+//! wires command-line parsing, configuration loading, caching, and output rendering together.
+//!
+//! # Why
+//! Performance review season. Stop manually digging through GitHub repos and waiting on CSV exports.
+//! `gh-log` surfaces the insights you usually compile by hand:
+//! - Lead time, cadence, and PR size distribution (S/M/L/XL)
+//! - Weekly breakdowns, repo-level trends, and top reviewers
+//! - JSON/CSV exports that drop straight into notes or LLM prompts
+//!
+//! # Primary commands
+//! - `view`: Launch an interactive dashboard with weekly summaries, repo stats, and sortable PR lists.
+//! - `print`: Export data as text, JSON, or CSV so you can feed it to an LLM or drop it into a doc.
+//! - `doctor`: Verify your GitHub CLI setup and reveal cache/config locations.
+//! - `config`: Open or scaffold the configuration file used to tune filters and size thresholds.
+//! - `completions`: Generate tab-completion scripts for popular shells.
+//!
+//! # Quick start
+//! ```text
+//! gh-log view
+//! gh-log print --json | claude "Summarize into 3 key accomplishments"
+//! gh-log doctor
+//! ```
+//!
+//! Requires the GitHub CLI (`gh`) to be installed and authenticated. Results are cached to keep
+//! repeated queries fast; pass `--force` to refresh. For installation instructions and screenshots,
+//! see the project README.
+//!
 mod cache;
 mod config;
 mod data;
@@ -10,7 +42,6 @@ use clap_complete::{Shell, generate};
 use std::io;
 use std::process::Command;
 
-// Helper functions for CLI help text
 fn view_help() -> &'static str {
     "Navigate PRs with an interactive terminal UI.
 
@@ -320,16 +351,19 @@ fn get_data_with_cache(
     use_cache: bool,
 ) -> anyhow::Result<(Vec<github::PullRequest>, usize)> {
     let cache = cache::Cache::default()?;
+    // Reuse cached data when allowed to avoid redundant API calls.
     if use_cache && let Some(cached) = cache.load(month)? {
         eprintln!("Loading from cache...");
         return Ok((cached.prs, cached.reviewed_count));
     }
 
+    // Fetch live data when the cache misses or a refresh is forced.
     eprintln!("Fetching data from GitHub...");
     let client = github::CommandClient::new()?;
     let prs = client.fetch_prs(month)?;
     let reviewed_count = client.fetch_reviewed_prs(month)?;
 
+    // Persist the fresh snapshot so the next call can reuse it.
     let cached_data = cache::CachedData {
         month: month.to_string(),
         timestamp: chrono::Utc::now(),
@@ -344,6 +378,7 @@ fn get_data_with_cache(
 fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
+    // We reload config on every run so edits from `gh-log config` take effect immediately.
     let cfg = config::Config::default()?;
     let month_data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
@@ -353,6 +388,7 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
 fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
+    // We reload config on every run so edits from `gh-log config` take effect immediately.
     let cfg = config::Config::default()?;
     let data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
