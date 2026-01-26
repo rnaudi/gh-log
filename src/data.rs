@@ -7,6 +7,9 @@ use crate::{
     github,
 };
 
+const CHANGED_FILES_L_THRESHOLD: u32 = 15;
+const CHANGED_FILES_XL_THRESHOLD: u32 = 25;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PRSize {
     S,
@@ -33,11 +36,11 @@ pub fn compute_pr_size(
     size_config: &SizeConfig,
 ) -> PRSize {
     let total_lines = additions + deletions;
-    if changed_files >= 25 {
+    if changed_files >= CHANGED_FILES_XL_THRESHOLD {
         return PRSize::XL;
     }
 
-    if changed_files >= 15 {
+    if changed_files >= CHANGED_FILES_L_THRESHOLD {
         if total_lines > size_config.large {
             return PRSize::XL;
         }
@@ -109,30 +112,12 @@ pub struct PRDetail {
 
 impl PRDetail {
     pub fn size(&self, size_config: &SizeConfig) -> PRSize {
-        let additions = self.additions;
-        let deletions = self.deletions;
-        let changed_files = self.changed_files;
-        let total_lines = additions + deletions;
-        if changed_files >= 25 {
-            return PRSize::XL;
-        }
-
-        if changed_files >= 15 {
-            if total_lines > size_config.large {
-                return PRSize::XL;
-            }
-            return PRSize::L;
-        }
-
-        if total_lines <= size_config.small {
-            PRSize::S
-        } else if total_lines <= size_config.medium {
-            PRSize::M
-        } else if total_lines <= size_config.large {
-            PRSize::L
-        } else {
-            PRSize::XL
-        }
+        compute_pr_size(
+            self.additions,
+            self.deletions,
+            self.changed_files,
+            size_config,
+        )
     }
 }
 
@@ -230,39 +215,56 @@ pub fn build_month_data(
         None => return MonthData::empty(month),
     };
 
-    let mut pr_data_for_metrics: Vec<PRData> = pr_data.clone();
-    pr_data_for_metrics.retain(|pr| !cfg.should_ignore_repo(&pr.repo_name));
-    pr_data_for_metrics.retain(|pr| !cfg.should_ignore_pr_title(&pr.title));
-
-    if pr_data_for_metrics.is_empty() {
-        return MonthData::empty(month);
-    }
+    let pr_data_for_metrics: Vec<PRData> = pr_data
+        .iter()
+        .filter(|pr| {
+            !cfg.should_ignore_repo(&pr.repo_name) && !cfg.should_ignore_pr_title(&pr.title)
+        })
+        .cloned()
+        .collect();
 
     let first_pr_date = pr_data.first().unwrap().created_at;
     let last_pr_date = pr_data.last().unwrap().created_at;
 
+    let metrics_first_pr_date = pr_data_for_metrics
+        .first()
+        .map(|pr| pr.created_at)
+        .unwrap_or(first_pr_date);
+    let metrics_last_pr_date = pr_data_for_metrics
+        .last()
+        .map(|pr| pr.created_at)
+        .unwrap_or(last_pr_date);
+
     let by_week = group_prs_by_week(&pr_data, first_pr_date, last_pr_date);
     let by_repo = group_prs_by_repo(&pr_data);
+    let by_repo_for_metrics = group_prs_by_repo(&pr_data_for_metrics);
 
     // Calculate metrics using only non-ignored PRs
     let month_start = Utc
-        .with_ymd_and_hms(first_pr_date.year(), first_pr_date.month(), 1, 0, 0, 0)
+        .with_ymd_and_hms(
+            metrics_first_pr_date.year(),
+            metrics_first_pr_date.month(),
+            1,
+            0,
+            0,
+            0,
+        )
         .unwrap();
-    let avg_lead_time = avg_duration(
-        &pr_data_for_metrics
-            .iter()
-            .map(|pr| pr.lead_time)
-            .collect::<Vec<_>>(),
-    );
-    let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
-    let frequency = pr_data_for_metrics.len() as f64 / (time_span_days / 7.0).max(1.0);
+    let lead_times_for_metrics: Vec<Duration> =
+        pr_data_for_metrics.iter().map(|pr| pr.lead_time).collect();
+    let avg_lead_time = avg_duration(&lead_times_for_metrics);
+    let frequency = if pr_data_for_metrics.is_empty() {
+        0.0
+    } else {
+        let time_span_days = (metrics_last_pr_date - metrics_first_pr_date)
+            .num_days()
+            .max(1) as f64;
+        pr_data_for_metrics.len() as f64 / (time_span_days / 7.0).max(1.0)
+    };
 
-    let by_week_for_metrics = group_prs_by_week(&pr_data_for_metrics, first_pr_date, last_pr_date);
-    let by_repo_for_metrics = group_prs_by_repo(&pr_data_for_metrics);
-
-    let week_data = build_week_data(&by_week_for_metrics, cfg);
+    let week_data = build_week_data(&by_week, cfg);
     let pr_details_by_week = build_pr_details_by_week(&by_week);
-    let repos = build_repo_data(&by_repo_for_metrics, cfg);
+    let repos = build_repo_data(&by_repo, &by_repo_for_metrics, cfg);
     let (size_s, size_m, size_l, size_xl) = compute_size_counts(&pr_data_for_metrics, cfg);
     let prs_by_repo = build_prs_by_repo(&repos, &by_repo);
 
@@ -341,13 +343,20 @@ fn build_week_data(
         .iter()
         .enumerate()
         .map(|(i, (start, end, prs))| {
-            let lead_times: Vec<Duration> = prs.iter().map(|pr| pr.lead_time).collect();
-            let (size_s, size_m, size_l, size_xl) = compute_size_counts(prs, cfg);
+            let counted: Vec<PRData> = prs
+                .iter()
+                .filter(|pr| {
+                    !cfg.should_ignore_repo(&pr.repo_name) && !cfg.should_ignore_pr_title(&pr.title)
+                })
+                .cloned()
+                .collect();
+            let lead_times: Vec<Duration> = counted.iter().map(|pr| pr.lead_time).collect();
+            let (size_s, size_m, size_l, size_xl) = compute_size_counts(&counted, cfg);
             WeekData {
                 week_num: i + 1,
                 week_start: *start,
                 week_end: *end,
-                pr_count: prs.len(),
+                pr_count: counted.len(),
                 avg_lead_time: avg_duration(&lead_times),
                 size_s,
                 size_m,
@@ -381,25 +390,44 @@ fn build_pr_details_by_week(
         .collect()
 }
 
-fn build_repo_data(by_repo: &BTreeMap<String, Vec<PRData>>, cfg: &Config) -> Vec<RepoData> {
-    let mut repos: Vec<RepoData> = by_repo
-        .iter()
-        .map(|(name, repo_prs)| {
-            let lead_times: Vec<Duration> = repo_prs.iter().map(|pr| pr.lead_time).collect();
-            let (size_s, size_m, size_l, size_xl) = compute_size_counts(repo_prs, cfg);
-
-            RepoData {
-                name: name.clone(),
-                pr_count: repo_prs.len(),
-                avg_lead_time: avg_duration(&lead_times),
-                size_s,
-                size_m,
-                size_l,
-                size_xl,
+fn build_repo_data(
+    all_repo: &BTreeMap<String, Vec<PRData>>,
+    counted_repo: &BTreeMap<String, Vec<PRData>>,
+    cfg: &Config,
+) -> Vec<RepoData> {
+    let mut repos: Vec<RepoData> = all_repo
+        .keys()
+        .map(|name| {
+            if let Some(prs) = counted_repo.get(name) {
+                let lead_times: Vec<Duration> = prs.iter().map(|pr| pr.lead_time).collect();
+                let (size_s, size_m, size_l, size_xl) = compute_size_counts(prs.as_slice(), cfg);
+                RepoData {
+                    name: name.clone(),
+                    pr_count: prs.len(),
+                    avg_lead_time: avg_duration(&lead_times),
+                    size_s,
+                    size_m,
+                    size_l,
+                    size_xl,
+                }
+            } else {
+                RepoData {
+                    name: name.clone(),
+                    pr_count: 0,
+                    avg_lead_time: Duration::zero(),
+                    size_s: 0,
+                    size_m: 0,
+                    size_l: 0,
+                    size_xl: 0,
+                }
             }
         })
         .collect();
-    repos.sort_by(|a, b| b.pr_count.cmp(&a.pr_count));
+    repos.sort_by(|a, b| {
+        b.pr_count
+            .cmp(&a.pr_count)
+            .then_with(|| a.name.cmp(&b.name))
+    });
     repos
 }
 
@@ -813,6 +841,61 @@ mod tests {
         assert_eq!(prs_by_repo[0][0].number, 1);
         assert_eq!(prs_by_repo[1].len(), 1);
         assert_eq!(prs_by_repo[1][0].number, 2);
+    }
+
+    #[test]
+    fn test_ignored_prs_visible_in_detail_but_not_metrics() {
+        let mut config = Config::default().unwrap();
+        config.filter.exclude_patterns.clear();
+        config.filter.exclude_repos.clear();
+        config.filter.ignore_repos.clear();
+        config.filter.ignore_patterns = vec!["^docs:".to_string()];
+
+        let base_date = Utc.with_ymd_and_hms(2024, 1, 10, 9, 0, 0).unwrap();
+
+        let prs = vec![
+            create_test_pr(
+                1,
+                "Feature work",
+                "owner/repo",
+                base_date,
+                base_date + Duration::hours(2),
+                30,
+                10,
+                3,
+                vec!["reviewer"],
+            ),
+            create_test_pr(
+                2,
+                "docs: Update guide",
+                "owner/repo",
+                base_date + Duration::hours(1),
+                base_date + Duration::hours(3),
+                5,
+                2,
+                1,
+                vec![],
+            ),
+        ];
+
+        let month_data = build_month_data("2024-01", prs, 0, &config);
+
+        assert_eq!(month_data.total_prs, 1);
+
+        let detail_titles: Vec<&str> = month_data
+            .prs_by_week
+            .iter()
+            .flat_map(|week| week.iter().map(|pr| pr.title.as_str()))
+            .collect();
+
+        assert!(
+            detail_titles.contains(&"Feature work"),
+            "expected feature PR to be visible in detail view"
+        );
+        assert!(
+            detail_titles.contains(&"docs: Update guide"),
+            "expected ignored PR to remain visible in detail view"
+        );
     }
 
     use proptest::prelude::*;
