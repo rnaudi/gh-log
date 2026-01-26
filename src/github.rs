@@ -4,6 +4,9 @@ use std::process::Command;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+const PR_SEARCH_PAGE_SIZE: usize = 100;
+const PR_REVIEW_PAGE_SIZE: usize = 10;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Author {
     pub login: String,
@@ -105,7 +108,7 @@ impl CommandClient {
 
             let query = format!(
                 r#"{{
-  search(query: "is:pr author:@me created:{}", type: ISSUE, first: 100{}) {{
+  search(query: "is:pr author:@me created:{month}", type: ISSUE, first: {page_size}{after_clause}) {{
     pageInfo {{
       hasNextPage
       endCursor
@@ -123,7 +126,7 @@ impl CommandClient {
         additions
         deletions
         changedFiles
-        reviews(first: 10) {{
+        reviews(first: {review_page_size}) {{
           nodes {{
             author {{
               login
@@ -134,7 +137,10 @@ impl CommandClient {
     }}
   }}
 }}"#,
-                month, after_clause
+                month = month,
+                page_size = PR_SEARCH_PAGE_SIZE,
+                after_clause = after_clause,
+                review_page_size = PR_REVIEW_PAGE_SIZE,
             );
 
             let output = Command::new("gh")
@@ -186,7 +192,7 @@ impl CommandClient {
 
             let query = format!(
                 r#"{{
-  search(query: "is:pr reviewed-by:@me created:{}", type: ISSUE, first: 100{}) {{
+  search(query: "is:pr reviewed-by:@me created:{month}", type: ISSUE, first: {page_size}{after_clause}) {{
     pageInfo {{
       hasNextPage
       endCursor
@@ -194,7 +200,9 @@ impl CommandClient {
     issueCount
   }}
 }}"#,
-                month, after_clause
+                month = month,
+                page_size = PR_SEARCH_PAGE_SIZE,
+                after_clause = after_clause,
             );
 
             let output = Command::new("gh")

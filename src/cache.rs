@@ -8,6 +8,9 @@ use std::path::PathBuf;
 use crate::github::PullRequest;
 
 const MAX_CACHE_SIZE: usize = 10_000;
+const CURRENT_MONTH_CACHE_TTL_HOURS: i64 = 6;
+const PREVIOUS_MONTH_CACHE_TTL_HOURS: i64 = 24;
+const LAST_MONTH_LOOKBACK_DAYS: i64 = 30;
 
 #[derive(Debug)]
 pub struct Cache {
@@ -95,11 +98,13 @@ fn is_cache_fresh(month: &str, cache_time: DateTime<Utc>) -> bool {
     let age = now - cache_time;
 
     let current_month = now.format("%Y-%m").to_string();
-    let last_month = (now - Duration::days(30)).format("%Y-%m").to_string();
+    let last_month = (now - Duration::days(LAST_MONTH_LOOKBACK_DAYS))
+        .format("%Y-%m")
+        .to_string();
 
     match month {
-        m if m == current_month => age < Duration::hours(6),
-        m if m == last_month => age < Duration::hours(24),
+        m if m == current_month => age < Duration::hours(CURRENT_MONTH_CACHE_TTL_HOURS),
+        m if m == last_month => age < Duration::hours(PREVIOUS_MONTH_CACHE_TTL_HOURS),
         _ => true,
     }
 }
