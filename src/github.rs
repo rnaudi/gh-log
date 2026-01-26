@@ -1,34 +1,46 @@
+//! gh-log GitHub client.
+//!
+//! Thin wrapper around the GitHub CLI that fetches authored and reviewed pull requests through the GraphQL API.
+//! Keeps cursor handling and JSON parsing in one place so higher layers stay test-friendly and free of shell details.
+
 use anyhow::bail;
 use std::process::Command;
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+/// Keep GraphQL page sizes near the top so batching stays consistent across queries.
 const PR_SEARCH_PAGE_SIZE: usize = 100;
+/// Reviews are sparse, so a smaller page keeps payloads light without extra round trips.
 const PR_REVIEW_PAGE_SIZE: usize = 10;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Lightweight representation of a GitHub user who authored a review or PR.
 pub struct Author {
     pub login: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Review metadata returned by the GitHub GraphQL API.
 pub struct Review {
     pub author: Author,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Wrapper around the list of reviews attached to a pull request.
 pub struct Reviews {
     pub nodes: Vec<Review>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Repo metadata packaged with each pull request response.
 pub struct Repository {
     #[serde(rename = "nameWithOwner")]
     pub name_with_owner: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Subset of pull request fields needed for analytics and presentation.
 pub struct PullRequest {
     pub number: u32,
     pub title: String,
@@ -87,19 +99,45 @@ struct GraphQLPullRequest {
     reviews: Reviews,
 }
 
+/// GitHub CLI-backed client that hides shell execution details from callers.
+///
+/// The client centralizes pagination and response parsing so higher layers can remain testable.
 pub struct CommandClient {}
 
 impl CommandClient {
+    /// Instantiate a new client, asserting that the GitHub CLI is installed and reachable.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::github::CommandClient;
+    /// let client = CommandClient::new()?;
+    /// # anyhow::Ok::<_, anyhow::Error>(())
+    /// ```
     pub fn new() -> anyhow::Result<Self> {
         check_gh_installed()?;
         Ok(CommandClient {})
     }
 
+    /// Fetch pull requests authored by the current user within the provided month (YYYY-MM).
+    ///
+    /// Uses cursor-based pagination on the search API so high-volume months do not drop results and
+    /// keeps the paging contract identical to other GitHub queries in this crate.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::github::CommandClient;
+    /// let client = CommandClient::new()?;
+    /// let prs = client.fetch_prs("2025-01")?;
+    /// println!("Fetched {} PRs", prs.len());
+    /// # anyhow::Ok::<_, anyhow::Error>(())
+    /// ```
     pub fn fetch_prs(&self, month: &str) -> anyhow::Result<Vec<PullRequest>> {
         let mut all_prs = Vec::new();
         let mut has_next_page = true;
         let mut cursor: Option<String> = None;
 
+        // Cursor-based pagination keeps us from missing PRs in busy months that span multiple pages.
+        // Reuse the same paging loop as fetch_prs so both commands honor GitHub's cursor protocol.
         while has_next_page {
             let after_clause = cursor
                 .as_ref()
@@ -179,6 +217,19 @@ impl CommandClient {
         Ok(all_prs)
     }
 
+    /// Count pull requests the current user reviewed within the given month (YYYY-MM).
+    ///
+    /// Reuses the same cursor loop as `fetch_prs` while relying on `issueCount` for the aggregate so the
+    /// total remains accurate even when pagination schema changes.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::github::CommandClient;
+    /// let client = CommandClient::new()?;
+    /// let reviewed = client.fetch_reviewed_prs("2025-01")?;
+    /// println!("Reviewed {} PRs", reviewed);
+    /// # anyhow::Ok::<_, anyhow::Error>(())
+    /// ```
     pub fn fetch_reviewed_prs(&self, month: &str) -> anyhow::Result<usize> {
         let mut total_count = 0;
         let mut has_next_page = true;
@@ -220,6 +271,7 @@ impl CommandClient {
             let response: serde_json::Value = serde_json::from_str(&json_str)?;
 
             if let Some(issue_count) = response["data"]["search"]["issueCount"].as_u64() {
+                // issueCount is already the total across all pages, so overwriting here is idempotent.
                 total_count = issue_count as usize;
             }
 

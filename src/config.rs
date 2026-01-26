@@ -1,3 +1,8 @@
+//! gh-log configuration subsystem.
+//!
+//! Loads the on-disk TOML config, applies repo/title filters, and keeps size thresholds consistent
+//! across the CLI.
+
 use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use regex::Regex;
@@ -5,32 +10,76 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::{fs, panic};
 
+/// Config mirrors the on-disk TOML layout, exposes filters and size thresholds, and keeps the resolved path cached.
+/// CLI commands load it once so they can print or rewrite the same file without reparsing directory hints from scratch.
+///
+/// # Examples
+/// ```rust,no_run
+/// # use gh_log::config::Config;
+/// let cfg = Config::default().expect("load config once");
+/// println!("excluded repos: {}", cfg.filter.exclude_repos.len());
+/// ```
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct Config {
+    /// Filters and pattern rules that control which PRs are hidden or skipped in metrics.
     #[serde(default)]
     pub filter: FilterConfig,
+    /// Size thresholds that bucket PRs into S/M/L/XL bands for analytics output.
     #[serde(default)]
     pub size: SizeConfig,
+    /// Cached on-disk location of the underlying TOML file for reuse by CLI commands.
     #[serde(skip)]
     config_path: PathBuf,
 }
 
+/// Filter lists come in exclude/ignore pairs so analytics can either hide noisy repos
+/// entirely or keep them visible while skipping their contribution to aggregates.
+/// Mirroring the pairs keeps the mental model clear for users editing the config.
+///
+/// # Examples
+/// ```rust
+/// # use gh_log::config::FilterConfig;
+/// let filters = FilterConfig {
+///     exclude_repos: vec!["example/noise".into()],
+///     ignore_patterns: vec!["^docs:".into()],
+///     ..Default::default()
+/// };
+/// assert!(filters.exclude_repos.contains(&"example/noise".to_string()));
+/// ```
+///
+/// Checklist: keep `validate()` and `matches_patterns()` in sync when adding new filter fields.
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct FilterConfig {
+    /// Repository names removed entirely from analytics output.
     #[serde(default)]
     pub exclude_repos: Vec<String>,
+    /// Regexes that drop PRs outright when their titles match.
     #[serde(default)]
     pub exclude_patterns: Vec<String>,
+    /// Repository names that stay visible in detail views but are ignored in aggregates.
     #[serde(default)]
     pub ignore_repos: Vec<String>,
+    /// Regexes that keep PRs visible yet exclude them from key performance metrics.
     #[serde(default)]
     pub ignore_patterns: Vec<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
+/// Size thresholds (in total line changes) used to categorize pull requests so every output mode
+/// labels PRs as S/M/L/XL the same way.
+///
+/// # Examples
+/// ```rust
+/// # use gh_log::config::SizeConfig;
+/// let sizes = SizeConfig::new(50, 200, 500);
+/// assert!(sizes.small < sizes.medium && sizes.medium < sizes.large);
+/// ```
 pub struct SizeConfig {
+    /// Maximum line-change count that still qualifies as a small (S) pull request.
     pub small: u32,
+    /// Maximum line-change count considered medium (M); larger values progress toward L/XL.
     pub medium: u32,
+    /// Maximum line-change count considered large (L); values above this are treated as XL.
     pub large: u32,
 }
 
@@ -51,6 +100,14 @@ impl FilterConfig {
 }
 
 impl SizeConfig {
+    /// Build size thresholds and assert they increase strictly.
+    ///
+    /// # Examples
+    /// ```rust
+    /// use gh_log::config::SizeConfig;
+    /// let sizes = SizeConfig::new(50, 200, 500);
+    /// assert_eq!(sizes.large, 500);
+    /// ```
     pub fn new(small: u32, medium: u32, large: u32) -> Self {
         assert!(
             small < medium && medium < large,
@@ -76,6 +133,14 @@ impl Default for SizeConfig {
 }
 
 impl Config {
+    /// Load configuration from the standard OS directory, creating a template when missing.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// let cfg = Config::default().expect("load config");
+    /// println!("{}", cfg.size.medium);
+    /// ```
     pub fn default() -> Result<Self> {
         let project_dirs =
             ProjectDirs::from("", "", "gh-log").context("Failed to determine config directory")?;
@@ -84,6 +149,15 @@ impl Config {
         Self::new(config_dir)
     }
 
+    /// Load configuration from a specific directory, creating the file if it does not exist yet.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// # use std::path::PathBuf;
+    /// let dir = PathBuf::from("/tmp/gh-log-config");
+    /// let cfg = Config::new(dir).expect("load config");
+    /// ```
     pub fn new(config_dir: PathBuf) -> Result<Self> {
         fs::create_dir_all(&config_dir)
             .with_context(|| format!("Failed to create config directory: {:?}", config_dir))?;
@@ -109,23 +183,61 @@ impl Config {
         Ok(config)
     }
 
+    /// Returns `true` when the repository is listed under `filter.exclude_repos`.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// let cfg = Config::default().expect("load config");
+    /// let skip_repo = cfg.should_exclude_repo("example/noise");
+    /// println!("skip repo: {}", skip_repo);
+    /// ```
     pub fn should_exclude_repo(&self, repo_name: &str) -> bool {
         self.filter.exclude_repos.contains(&repo_name.to_string())
     }
 
+    /// Returns `true` when the pull request title matches any `filter.exclude_patterns` entry.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// let cfg = Config::default().expect("load config");
+    /// let skip_title = cfg.should_exclude_pr_title("docs: update handbook");
+    /// println!("skip title: {}", skip_title);
+    /// ```
     pub fn should_exclude_pr_title(&self, title: &str) -> bool {
         self.matches_patterns(title, &self.filter.exclude_patterns)
     }
 
+    /// Returns `true` when the repository is listed under `filter.ignore_repos`.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// let cfg = Config::default().expect("load config");
+    /// let ignore_repo = cfg.should_ignore_repo("example/playground");
+    /// println!("ignore repo metrics: {}", ignore_repo);
+    /// ```
     pub fn should_ignore_repo(&self, repo_name: &str) -> bool {
         self.filter.ignore_repos.contains(&repo_name.to_string())
     }
 
+    /// Returns `true` when the pull request title matches any pattern in `filter.ignore_patterns`.
+    ///
+    /// # Examples
+    /// ```rust,no_run
+    /// # use gh_log::config::Config;
+    /// let cfg = Config::default().expect("load config");
+    /// let ignore_title = cfg.should_ignore_pr_title("chore: update docs");
+    /// println!("ignore title metrics: {}", ignore_title);
+    /// ```
     pub fn should_ignore_pr_title(&self, title: &str) -> bool {
         self.matches_patterns(title, &self.filter.ignore_patterns)
     }
 
     fn matches_patterns(&self, text: &str, patterns: &[String]) -> bool {
+        // validate() already proved each pattern compiles; recompiling here keeps the helper
+        // side-effect free, and the tiny lists make the cost imperceptible.
         patterns.iter().any(|pattern| {
             let re = Regex::new(pattern).unwrap_or_else(|err| {
                 panic!("Failed to compile regex pattern `{}`: {}", pattern, err)
@@ -135,6 +247,9 @@ impl Config {
     }
 }
 
+/// Write a sample configuration file to the given path, seeding default filters and size thresholds.
+///
+/// Overwrites any existing file contents so first-time users start with a documented template.
 pub fn example(config_path: &PathBuf) -> Result<()> {
     let example_config = Config {
         filter: FilterConfig {

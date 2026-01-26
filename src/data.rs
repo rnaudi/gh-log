@@ -1,3 +1,17 @@
+//! gh-log data aggregation pipeline.
+//!
+//! # Overview
+//! Turns raw GitHub pull requests into month-level analytics consumed by the TUI and exporters.
+//!
+//! # Design
+//! - Calculates size buckets with both line-change and changed-files thresholds.
+//! - Splits month data by week and repository so views can reuse the same structures.
+//! - Filters repos/titles via `config` before computing metrics to keep exports consistent.
+//!
+//! # Why
+//! Centralizing aggregation logic keeps CLI commands thin and guarantees that every output mode
+//! reports identical numbers.
+
 use chrono::{DateTime, Datelike, Duration, TimeZone, Utc};
 use std::collections::BTreeMap;
 use std::fmt;
@@ -7,9 +21,13 @@ use crate::{
     github,
 };
 
+/// Number of changed files that upgrades a pull request to the Large bucket.
 const CHANGED_FILES_L_THRESHOLD: u32 = 15;
+/// Number of changed files that immediately categorizes a pull request as XL.
 const CHANGED_FILES_XL_THRESHOLD: u32 = 25;
 
+/// Size bucket for a pull request based on line and changed-file thresholds.
+/// Maps to S/M/L/XL labels used across the UI and exporters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PRSize {
     S,
@@ -29,6 +47,16 @@ impl fmt::Display for PRSize {
     }
 }
 
+/// Compute the size bucket for a pull request using configured thresholds.
+///
+/// # Examples
+/// ```rust
+/// # use gh_log::config::SizeConfig;
+/// # use gh_log::data::{compute_pr_size, PRSize};
+/// let sizes = SizeConfig::new(50, 200, 500);
+/// let bucket = compute_pr_size(30, 10, 2, &sizes);
+/// assert_eq!(bucket, PRSize::S);
+/// ```
 pub fn compute_pr_size(
     additions: u32,
     deletions: u32,
@@ -58,6 +86,7 @@ pub fn compute_pr_size(
     }
 }
 
+/// Aggregated statistics for a single calendar week within the month.
 #[derive(Debug)]
 pub struct WeekData {
     pub week_num: usize,
@@ -71,6 +100,7 @@ pub struct WeekData {
     pub size_xl: usize,
 }
 
+/// Aggregated pull request metrics scoped to a single repository.
 #[derive(Debug)]
 pub struct RepoData {
     pub name: String,
@@ -83,6 +113,7 @@ pub struct RepoData {
 }
 
 impl RepoData {
+    /// Render the repo's size distribution as "xS xM xL xXL".
     pub fn format_size_distribution(&self) -> String {
         format!(
             "{}S {}M {}L {}XL",
@@ -91,12 +122,14 @@ impl RepoData {
     }
 }
 
+/// Reviewer summary used to highlight collaborators contributing feedback.
 #[derive(Debug, Clone)]
 pub struct ReviewerData {
     pub login: String,
     pub pr_count: usize,
 }
 
+/// Detailed record for a single pull request used in list and detail views.
 #[derive(Debug, Clone)]
 pub struct PRDetail {
     pub created_at: DateTime<Utc>,
@@ -111,6 +144,7 @@ pub struct PRDetail {
 }
 
 impl PRDetail {
+    /// Determine this PR's size bucket using the shared thresholds.
     pub fn size(&self, size_config: &SizeConfig) -> PRSize {
         compute_pr_size(
             self.additions,
@@ -121,6 +155,7 @@ impl PRDetail {
     }
 }
 
+/// Month-level aggregation consumed by the TUI and export commands.
 #[derive(Debug)]
 pub struct MonthData {
     pub month_start: DateTime<Utc>,
@@ -164,6 +199,7 @@ impl MonthData {
         }
     }
 
+    /// Render the month-wide size distribution as "xS xM xL xXL".
     pub fn format_size_distribution(&self) -> String {
         format!(
             "{}S {}M {}L {}XL",
@@ -193,6 +229,19 @@ struct PRData {
     changed_files: u32,
 }
 
+/// Aggregate raw pull requests into month-level analytics, honoring the provided filters.
+/// Returns `MonthData::empty` when no pull requests remain after exclusions.
+///
+/// # Examples
+/// ```rust,no_run
+/// # use gh_log::config::Config;
+/// # use gh_log::data::build_month_data;
+/// # use gh_log::github::PullRequest;
+/// # fn demo(cfg: &Config, prs: Vec<PullRequest>) {
+/// let month = build_month_data("2025-01", prs, 0, cfg);
+/// println!("Total PRs: {}", month.total_prs);
+/// # }
+/// ```
 pub fn build_month_data(
     month: &str,
     mut prs: Vec<github::PullRequest>,
@@ -215,6 +264,7 @@ pub fn build_month_data(
         None => return MonthData::empty(month),
     };
 
+    // Keep ignored repos/titles visible in detail views but drop them from KPI calculations.
     let pr_data_for_metrics: Vec<PRData> = pr_data
         .iter()
         .filter(|pr| {
@@ -253,6 +303,7 @@ pub fn build_month_data(
     let lead_times_for_metrics: Vec<Duration> =
         pr_data_for_metrics.iter().map(|pr| pr.lead_time).collect();
     let avg_lead_time = avg_duration(&lead_times_for_metrics);
+    // Frequency is PRs per week — divide the count by (days / 7) so long spans do not skew the rate.
     let frequency = if pr_data_for_metrics.is_empty() {
         0.0
     } else {
