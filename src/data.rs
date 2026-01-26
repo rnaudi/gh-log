@@ -225,14 +225,16 @@ pub fn build_month_data(
     }
 
     let reviewers = extract_reviewers(&prs);
-    let mut pr_data = match build_pr_data(&prs) {
+    let pr_data = match build_pr_data(&prs) {
         Some(data) => data,
         None => return MonthData::empty(month),
     };
 
-    pr_data.retain(|pr| !cfg.should_ignore_repo(&pr.repo_name));
-    pr_data.retain(|pr| !cfg.should_ignore_pr_title(&pr.title));
-    if pr_data.is_empty() {
+    let mut pr_data_for_metrics: Vec<PRData> = pr_data.clone();
+    pr_data_for_metrics.retain(|pr| !cfg.should_ignore_repo(&pr.repo_name));
+    pr_data_for_metrics.retain(|pr| !cfg.should_ignore_pr_title(&pr.title));
+
+    if pr_data_for_metrics.is_empty() {
         return MonthData::empty(month);
     }
 
@@ -242,21 +244,31 @@ pub fn build_month_data(
     let by_week = group_prs_by_week(&pr_data, first_pr_date, last_pr_date);
     let by_repo = group_prs_by_repo(&pr_data);
 
+    // Calculate metrics using only non-ignored PRs
     let month_start = Utc
         .with_ymd_and_hms(first_pr_date.year(), first_pr_date.month(), 1, 0, 0, 0)
         .unwrap();
-    let avg_lead_time = avg_duration(&pr_data.iter().map(|pr| pr.lead_time).collect::<Vec<_>>());
+    let avg_lead_time = avg_duration(
+        &pr_data_for_metrics
+            .iter()
+            .map(|pr| pr.lead_time)
+            .collect::<Vec<_>>(),
+    );
     let time_span_days = (last_pr_date - first_pr_date).num_days().max(1) as f64;
-    let frequency = pr_data.len() as f64 / (time_span_days / 7.0).max(1.0);
-    let week_data = build_week_data(&by_week, cfg);
+    let frequency = pr_data_for_metrics.len() as f64 / (time_span_days / 7.0).max(1.0);
+
+    let by_week_for_metrics = group_prs_by_week(&pr_data_for_metrics, first_pr_date, last_pr_date);
+    let by_repo_for_metrics = group_prs_by_repo(&pr_data_for_metrics);
+
+    let week_data = build_week_data(&by_week_for_metrics, cfg);
     let pr_details_by_week = build_pr_details_by_week(&by_week);
-    let repos = build_repo_data(&by_repo, cfg);
-    let (size_s, size_m, size_l, size_xl) = compute_size_counts(&pr_data, cfg);
+    let repos = build_repo_data(&by_repo_for_metrics, cfg);
+    let (size_s, size_m, size_l, size_xl) = compute_size_counts(&pr_data_for_metrics, cfg);
     let prs_by_repo = build_prs_by_repo(&repos, &by_repo);
 
     MonthData {
         month_start,
-        total_prs: pr_data.len(),
+        total_prs: pr_data_for_metrics.len(),
         avg_lead_time,
         frequency,
         size_s,
