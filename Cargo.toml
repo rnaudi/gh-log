@@ -19,6 +19,6 @@ toml = "0.8"
 [dev-dependencies]
 assert_cmd = "2.1"
 predicates = "3.1"
-proptest = "1.9"
+proptest = "1.10"
 insta = "1.46.1"
 tempfile = "3.0"
