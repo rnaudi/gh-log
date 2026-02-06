@@ -11,7 +11,7 @@ ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4.5.54", features = ["derive"] }
 clap_complete = "4.5"
-regex = "1.12.2"
+regex = "1.12.3"
 anyhow = "1.0.100"
 directories = "6.0"
 toml = "0.8"
