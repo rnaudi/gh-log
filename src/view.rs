@@ -435,25 +435,25 @@ fn render_controls(frame: &mut Frame, area: Rect, current_view: View) {
     frame.render_widget(widget, area);
 }
 
-fn render_detail_header(frame: &mut Frame, area: Rect, data: &MonthData, mode: DetailMode) {
+fn render_header(frame: &mut Frame, area: Rect, data: &MonthData, subtitle: Option<&str>) {
     let month_year = format_month(data.month_start);
-    let mode_label = match mode {
-        DetailMode::ByWeek => "by Week",
-        DetailMode::ByRepo => "by Repository",
-    };
     let review_ratio = if data.total_prs > 0 {
         data.reviewed_count as f64 / data.total_prs as f64
     } else {
         0.0
     };
 
+    let mut title_spans = vec![
+        Span::raw("GitHub PRs for "),
+        Span::styled(month_year, Style::default().bold()),
+    ];
+    if let Some(label) = subtitle {
+        title_spans.push(Span::raw(" — "));
+        title_spans.push(Span::styled(label.to_string(), Style::default().fg(Color::Cyan)));
+    }
+
     let summary_lines = vec![
-        Line::from(vec![
-            Span::raw("GitHub PRs for "),
-            Span::styled(month_year, Style::default().bold()),
-            Span::raw(" — "),
-            Span::styled(mode_label, Style::default().fg(Color::Cyan)),
-        ]),
+        Line::from(title_spans),
         Line::from(vec![
             Span::raw("Total PRs: "),
             Span::styled(data.total_prs.to_string(), Style::default().fg(Color::Blue)),
@@ -491,54 +491,16 @@ fn render_detail_header(frame: &mut Frame, area: Rect, data: &MonthData, mode: D
     frame.render_widget(header, area);
 }
 
-fn render_summary_header(frame: &mut Frame, area: Rect, data: &MonthData) {
-    let month_year = format_month(data.month_start);
-    let review_ratio = if data.total_prs > 0 {
-        data.reviewed_count as f64 / data.total_prs as f64
-    } else {
-        0.0
+fn render_detail_header(frame: &mut Frame, area: Rect, data: &MonthData, mode: DetailMode) {
+    let mode_label = match mode {
+        DetailMode::ByWeek => "by Week",
+        DetailMode::ByRepo => "by Repository",
     };
+    render_header(frame, area, data, Some(mode_label));
+}
 
-    let summary_lines = vec![
-        Line::from(vec![
-            Span::raw("GitHub PRs for "),
-            Span::styled(month_year, Style::default().bold()),
-        ]),
-        Line::from(vec![
-            Span::raw("Total PRs: "),
-            Span::styled(data.total_prs.to_string(), Style::default().fg(Color::Blue)),
-            Span::raw(" │ Avg Lead Time: "),
-            Span::styled(
-                format_duration(data.avg_lead_time),
-                Style::default().fg(Color::Yellow),
-            ),
-            Span::raw(" │ Frequency: "),
-            Span::styled(
-                format_frequency(data.frequency),
-                Style::default().fg(Color::Green),
-            ),
-        ]),
-        Line::from(vec![
-            Span::raw("Sizes: "),
-            Span::raw(data.format_size_distribution()),
-            Span::raw(" │ Review Balance: "),
-            Span::styled(
-                format!("{:.1}:1", review_ratio),
-                Style::default().fg(Color::Cyan),
-            ),
-            Span::styled(
-                format!(" ({} reviewed)", data.reviewed_count),
-                Style::default().fg(Color::DarkGray),
-            ),
-        ]),
-    ];
-
-    let header = Paragraph::new(summary_lines).block(
-        Block::default()
-            .borders(Borders::BOTTOM)
-            .border_style(Style::default().fg(Color::DarkGray)),
-    );
-    frame.render_widget(header, area);
+fn render_summary_header(frame: &mut Frame, area: Rect, data: &MonthData) {
+    render_header(frame, area, data, None);
 }
 
 fn render_scrollable_content(
