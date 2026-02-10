@@ -99,6 +99,23 @@ struct GraphQLPullRequest {
     reviews: Reviews,
 }
 
+impl From<GraphQLPullRequest> for PullRequest {
+    fn from(pr: GraphQLPullRequest) -> Self {
+        Self {
+            number: pr.number,
+            title: pr.title,
+            body: pr.body,
+            repository: pr.repository,
+            created_at: pr.created_at,
+            updated_at: pr.updated_at,
+            additions: pr.additions,
+            deletions: pr.deletions,
+            changed_files: pr.changed_files,
+            reviews: pr.reviews,
+        }
+    }
+}
+
 /// GitHub CLI-backed client that hides shell execution details from callers.
 ///
 /// The client centralizes pagination and response parsing so higher layers can remain testable.
@@ -196,18 +213,7 @@ impl CommandClient {
             let response: GraphQLResponse = serde_json::from_str(&json_str)?;
 
             for pr in response.data.search.nodes {
-                all_prs.push(PullRequest {
-                    number: pr.number,
-                    title: pr.title,
-                    body: pr.body,
-                    repository: pr.repository,
-                    created_at: pr.created_at,
-                    updated_at: pr.updated_at,
-                    additions: pr.additions,
-                    deletions: pr.deletions,
-                    changed_files: pr.changed_files,
-                    reviews: pr.reviews,
-                });
+                all_prs.push(pr.into());
             }
 
             has_next_page = response.data.search.page_info.has_next_page;
