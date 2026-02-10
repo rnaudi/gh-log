@@ -231,57 +231,34 @@ impl CommandClient {
     /// # anyhow::Ok::<_, anyhow::Error>(())
     /// ```
     pub fn fetch_reviewed_prs(&self, month: &str) -> anyhow::Result<usize> {
-        let mut total_count = 0;
-        let mut has_next_page = true;
-        let mut cursor: Option<String> = None;
-
-        while has_next_page {
-            let after_clause = cursor
-                .as_ref()
-                .map(|c| format!(r#", after: "{}""#, c))
-                .unwrap_or_default();
-
-            let query = format!(
-                r#"{{
-  search(query: "is:pr reviewed-by:@me created:{month}", type: ISSUE, first: {page_size}{after_clause}) {{
-    pageInfo {{
-      hasNextPage
-      endCursor
-    }}
+        // issueCount is the global total regardless of pagination, so a single
+        // request with first:1 is enough to retrieve the count.
+        let query = format!(
+            r#"{{
+  search(query: "is:pr reviewed-by:@me created:{month}", type: ISSUE, first: 1) {{
     issueCount
   }}
 }}"#,
-                month = month,
-                page_size = PR_SEARCH_PAGE_SIZE,
-                after_clause = after_clause,
-            );
+            month = month,
+        );
 
-            let output = Command::new("gh")
-                .arg("api")
-                .arg("graphql")
-                .arg("-f")
-                .arg(format!("query={}", query))
-                .output()?;
-            if !output.status.success() {
-                let stderr = String::from_utf8_lossy(&output.stderr);
-                bail!("GraphQL query failed: {}", stderr);
-            }
-
-            let json_str = String::from_utf8_lossy(&output.stdout);
-            let response: serde_json::Value = serde_json::from_str(&json_str)?;
-
-            if let Some(issue_count) = response["data"]["search"]["issueCount"].as_u64() {
-                // issueCount is already the total across all pages, so overwriting here is idempotent.
-                total_count = issue_count as usize;
-            }
-
-            has_next_page = response["data"]["search"]["pageInfo"]["hasNextPage"]
-                .as_bool()
-                .unwrap_or(false);
-            cursor = response["data"]["search"]["pageInfo"]["endCursor"]
-                .as_str()
-                .map(|s| s.to_string());
+        let output = Command::new("gh")
+            .arg("api")
+            .arg("graphql")
+            .arg("-f")
+            .arg(format!("query={}", query))
+            .output()?;
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            bail!("GraphQL query failed: {}", stderr);
         }
+
+        let json_str = String::from_utf8_lossy(&output.stdout);
+        let response: serde_json::Value = serde_json::from_str(&json_str)?;
+
+        let total_count = response["data"]["search"]["issueCount"]
+            .as_u64()
+            .unwrap_or(0) as usize;
 
         Ok(total_count)
     }
