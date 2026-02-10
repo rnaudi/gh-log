@@ -959,7 +959,15 @@ fn truncate(s: &str, max_len: usize) -> String {
     if s.len() <= max_len {
         format!("{:width$}", s, width = max_len)
     } else {
-        format!("{:width$}", &s[..max_len], width = max_len)
+        // Find the last char boundary at or before max_len to avoid
+        // panicking on multi-byte UTF-8 characters.
+        let end = s
+            .char_indices()
+            .map(|(i, c)| i + c.len_utf8())
+            .take_while(|&i| i <= max_len)
+            .last()
+            .unwrap_or(0);
+        format!("{:width$}", &s[..end], width = max_len)
     }
 }
 
