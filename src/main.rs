@@ -315,7 +315,7 @@ enum Commands {
         month: Option<String>,
         #[arg(long, help = "Force refresh data from GitHub API, bypassing cache")]
         force: bool,
-        #[arg(long, help = "Output data in JSON format")]
+        #[arg(long, help = "Output data in JSON format", conflicts_with = "csv")]
         json: bool,
         #[arg(long, help = "Output data in CSV format")]
         csv: bool,
