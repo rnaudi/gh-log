@@ -1159,11 +1159,11 @@ pub fn print_csv(data: &data::MonthData, size_cfg: &SizeConfig) -> anyhow::Resul
                 .map(|b| b.replace("\"", "\"\"").replace("\n", " "))
                 .unwrap_or_default();
             println!(
-                "{},{},{},\"{}\",\"{}\",{:.2},{},{},{},{}",
+                "\"{}\",\"{}\",{},\"{}\",\"{}\",{:.2},\"{}\",{},{},{}",
                 format_date(pr.created_at),
-                pr.repo,
+                pr.repo.replace("\"", "\"\""),
                 pr.number,
-                pr.title.replace("\"", "\"\""), // Escape quotes in CSV
+                pr.title.replace("\"", "\"\""),
                 body_escaped,
                 lead_time_hours,
                 pr.size(size_cfg),
