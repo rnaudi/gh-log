@@ -6,13 +6,13 @@
 //!
 //! ```rust,no_run
 //! # use gh_log::cache::Cache;
-//! let cache = Cache::default().expect("cache directory");
+//! let cache = Cache::init().expect("cache directory");
 //! if let Some(snapshot) = cache.load("2025-01").expect("cache read") {
 //!     println!("Cached {} PRs", snapshot.prs.len());
 //! }
 //! ```
 
-use anyhow::{Context, Result, bail};
+use anyhow::{bail, Context, Result};
 use chrono::{DateTime, Duration, Utc};
 use directories::ProjectDirs;
 use serde::{Deserialize, Serialize};
@@ -35,7 +35,7 @@ const LAST_MONTH_LOOKBACK_DAYS: i64 = 30;
 /// # Examples
 /// ```rust,no_run
 /// # use gh_log::cache::Cache;
-/// let cache = Cache::default().expect("cache directory to exist");
+/// let cache = Cache::init().expect("cache directory to exist");
 /// assert!(cache.load("2099-01").expect("cache read").is_none());
 /// ```
 pub struct Cache {
@@ -64,9 +64,9 @@ impl Cache {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::cache::Cache;
-    /// let cache = Cache::default().expect("cache directory to exist");
+    /// let cache = Cache::init().expect("cache directory to exist");
     /// ```
-    pub fn default() -> anyhow::Result<Self> {
+    pub fn init() -> anyhow::Result<Self> {
         let project_dirs =
             ProjectDirs::from("", "", "gh-log").context("Failed to determine cache directory")?;
         let cache_dir = project_dirs.cache_dir().to_path_buf();
@@ -100,7 +100,7 @@ impl Cache {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::cache::Cache;
-    /// let cache = Cache::default().expect("cache directory");
+    /// let cache = Cache::init().expect("cache directory");
     /// if let Some(snapshot) = cache.load("2025-01").expect("cache read") {
     ///     println!("Found {} cached PRs", snapshot.prs.len());
     /// }
@@ -135,7 +135,7 @@ impl Cache {
     /// ```rust,no_run
     /// # use gh_log::cache::{Cache, CachedData};
     /// # use chrono::Utc;
-    /// let cache = Cache::default().expect("cache directory");
+    /// let cache = Cache::init().expect("cache directory");
     /// let data = CachedData {
     ///     month: "2025-01".into(),
     ///     timestamp: Utc::now(),

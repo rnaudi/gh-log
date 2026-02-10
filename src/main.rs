@@ -350,7 +350,7 @@ fn get_data_with_cache(
     month: &str,
     use_cache: bool,
 ) -> anyhow::Result<(Vec<github::PullRequest>, usize)> {
-    let cache = cache::Cache::default()?;
+    let cache = cache::Cache::init()?;
     // Reuse cached data when allowed to avoid redundant API calls.
     if use_cache && let Some(cached) = cache.load(month)? {
         eprintln!("Loading from cache...");
@@ -379,7 +379,7 @@ fn run_view_mode(month: &str, force: bool) -> anyhow::Result<()> {
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     // We reload config on every run so edits from `gh-log config` take effect immediately.
-    let cfg = config::Config::default()?;
+    let cfg = config::Config::load()?;
     let month_data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
     view::run(month_data, cfg)
@@ -389,7 +389,7 @@ fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Res
     let use_cache = !force;
     let (prs, reviewed_count) = get_data_with_cache(month, use_cache)?;
     // We reload config on every run so edits from `gh-log config` take effect immediately.
-    let cfg = config::Config::default()?;
+    let cfg = config::Config::load()?;
     let data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
     match format {
@@ -474,7 +474,7 @@ fn run_config() -> anyhow::Result<()> {
         Some(dirs) => {
             let config_path = dirs.config_dir().join("config.toml");
             if config_path.exists() {
-                let config = config::Config::default()?;
+                let config = config::Config::load()?;
                 println!("{}", toml::to_string_pretty(&config)?);
                 eprintln!("\n# {}", config_path.display());
             } else {
