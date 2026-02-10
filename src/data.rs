@@ -259,10 +259,7 @@ pub fn build_month_data(
     }
 
     let reviewers = extract_reviewers(&prs);
-    let pr_data = match build_pr_data(&prs) {
-        Some(data) => data,
-        None => return MonthData::empty(month),
-    };
+    let pr_data = build_pr_data(&prs);
 
     // Keep ignored repos/titles visible in detail views but drop them from KPI calculations.
     let pr_data_for_metrics: Vec<PRData> = pr_data
@@ -556,7 +553,7 @@ impl AsRef<PRData> for PRData {
     }
 }
 
-fn build_pr_data(prs: &[github::PullRequest]) -> Option<Vec<PRData>> {
+fn build_pr_data(prs: &[github::PullRequest]) -> Vec<PRData> {
     let mut pr_data: Vec<PRData> = Vec::with_capacity(prs.len());
     for pr in prs {
         let lead_time = pr.updated_at - pr.created_at;
@@ -582,7 +579,7 @@ fn build_pr_data(prs: &[github::PullRequest]) -> Option<Vec<PRData>> {
     }
 
     pr_data.sort_by_key(|pr| pr.created_at);
-    Some(pr_data)
+    pr_data
 }
 
 #[cfg(test)]
