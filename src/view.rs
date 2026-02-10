@@ -449,7 +449,10 @@ fn render_header(frame: &mut Frame, area: Rect, data: &MonthData, subtitle: Opti
     ];
     if let Some(label) = subtitle {
         title_spans.push(Span::raw(" — "));
-        title_spans.push(Span::styled(label.to_string(), Style::default().fg(Color::Cyan)));
+        title_spans.push(Span::styled(
+            label.to_string(),
+            Style::default().fg(Color::Cyan),
+        ));
     }
 
     let summary_lines = vec![
@@ -639,7 +642,12 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
-fn build_pr_row(pr: &PRDetail, cfg: &Config, repo_width: usize, title_width: usize) -> Line<'static> {
+fn build_pr_row(
+    pr: &PRDetail,
+    cfg: &Config,
+    repo_width: usize,
+    title_width: usize,
+) -> Line<'static> {
     let pr_size = pr.size(&cfg.size);
     let size_color = match pr_size {
         PRSize::S => Color::Green,
