@@ -7,7 +7,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use regex::Regex;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{fs, panic};
 
 /// Config mirrors the on-disk TOML layout, exposes filters and size thresholds, and keeps the resolved path cached.
@@ -250,7 +250,7 @@ impl Config {
 /// Write a sample configuration file to the given path, seeding default filters and size thresholds.
 ///
 /// Overwrites any existing file contents so first-time users start with a documented template.
-pub fn example(config_path: &PathBuf) -> Result<()> {
+pub fn example(config_path: &Path) -> Result<()> {
     let example_config = Config {
         filter: FilterConfig {
             exclude_repos: vec!["username/spam".to_string()],
@@ -259,7 +259,7 @@ pub fn example(config_path: &PathBuf) -> Result<()> {
             ignore_patterns: vec!["^docs:".to_string(), "^meeting:".to_string()],
         },
         size: SizeConfig::new(50, 200, 500),
-        config_path: config_path.clone(),
+        config_path: config_path.to_path_buf(),
     };
 
     let toml_string = toml::to_string_pretty(&example_config)
