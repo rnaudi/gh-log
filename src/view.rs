@@ -677,6 +677,50 @@ fn build_summary_content(data: &MonthData, width: usize) -> Vec<Line<'static>> {
     lines
 }
 
+fn build_pr_row(pr: &PRDetail, cfg: &Config, repo_width: usize, title_width: usize) -> Line<'static> {
+    let pr_size = pr.size(&cfg.size);
+    let size_color = match pr_size {
+        PRSize::S => Color::Green,
+        PRSize::M => Color::Blue,
+        PRSize::L => Color::Yellow,
+        PRSize::XL => Color::Red,
+    };
+
+    Line::from(vec![
+        Span::styled(
+            format_date_short(pr.created_at),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::raw(" │ "),
+        Span::styled(
+            format!(
+                "{:repo_w$}",
+                truncate(&pr.repo, repo_width),
+                repo_w = repo_width
+            ),
+            Style::default().fg(Color::Blue),
+        ),
+        Span::raw(" │ "),
+        Span::styled(
+            format!("#{:4}", pr.number),
+            Style::default().fg(Color::DarkGray),
+        ),
+        Span::raw(" "),
+        Span::raw(format!(
+            "{:title_w$}",
+            truncate(&pr.title, title_width),
+            title_w = title_width
+        )),
+        Span::raw(" │ "),
+        Span::styled(
+            format!("{:8}", format_duration(pr.lead_time)),
+            Style::default().fg(Color::Yellow),
+        ),
+        Span::raw(" │ "),
+        Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
+    ])
+}
+
 fn build_detail_by_week_content(
     data: &MonthData,
     cfg: &Config,
@@ -707,47 +751,7 @@ fn build_detail_by_week_content(
         );
 
         for pr in prs {
-            let pr_size = pr.size(&cfg.size);
-            let size_color = match pr_size {
-                PRSize::S => Color::Green,
-                PRSize::M => Color::Blue,
-                PRSize::L => Color::Yellow,
-                PRSize::XL => Color::Red,
-            };
-
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format_date_short(pr.created_at),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!(
-                        "{:repo_w$}",
-                        truncate(&pr.repo, repo_width),
-                        repo_w = repo_width
-                    ),
-                    Style::default().fg(Color::Blue),
-                ),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!("#{:4}", pr.number),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::raw(" "),
-                Span::raw(format!(
-                    "{:title_w$}",
-                    truncate(&pr.title, title_width),
-                    title_w = title_width
-                )),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!("{:8}", format_duration(pr.lead_time)),
-                    Style::default().fg(Color::Yellow),
-                ),
-                Span::raw(" │ "),
-                Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
-            ]));
+            lines.push(build_pr_row(pr, cfg, repo_width, title_width));
         }
         for _ in 0..SECTION_SPACING {
             lines.push(Line::from(""));
@@ -787,47 +791,7 @@ fn build_detail_by_repo_content(
         );
 
         for pr in prs {
-            let pr_size = pr.size(&cfg.size);
-            let size_color = match pr_size {
-                PRSize::S => Color::Green,
-                PRSize::M => Color::Blue,
-                PRSize::L => Color::Yellow,
-                PRSize::XL => Color::Red,
-            };
-
-            lines.push(Line::from(vec![
-                Span::styled(
-                    format_date_short(pr.created_at),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!(
-                        "{:repo_w$}",
-                        truncate(&pr.repo, repo_width),
-                        repo_w = repo_width
-                    ),
-                    Style::default().fg(Color::Blue),
-                ),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!("#{:4}", pr.number),
-                    Style::default().fg(Color::DarkGray),
-                ),
-                Span::raw(" "),
-                Span::raw(format!(
-                    "{:title_w$}",
-                    truncate(&pr.title, title_width),
-                    title_w = title_width
-                )),
-                Span::raw(" │ "),
-                Span::styled(
-                    format!("{:8}", format_duration(pr.lead_time)),
-                    Style::default().fg(Color::Yellow),
-                ),
-                Span::raw(" │ "),
-                Span::styled(format!("{}", pr_size), Style::default().fg(size_color)),
-            ]));
+            lines.push(build_pr_row(pr, cfg, repo_width, title_width));
         }
         for _ in 0..SECTION_SPACING {
             lines.push(Line::from(""));
