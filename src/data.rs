@@ -629,7 +629,7 @@ mod tests {
 
     #[test]
     fn test_build_month_data_empty_input() {
-        let config = Config::default().unwrap();
+        let config = Config::load().unwrap();
         let prs = vec![];
 
         let result = build_month_data("2024-01", prs, 0, &config);
@@ -641,7 +641,7 @@ mod tests {
 
     #[test]
     fn test_build_month_data_single_pr() {
-        let config = Config::default().unwrap();
+        let config = Config::load().unwrap();
         let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
 
         let prs = vec![create_test_pr(
@@ -669,7 +669,7 @@ mod tests {
 
     #[test]
     fn test_build_month_data_multiple_repos_sorted_by_pr_count() {
-        let config = Config::default().unwrap();
+        let config = Config::load().unwrap();
         let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
 
         let prs = vec![
@@ -721,7 +721,7 @@ mod tests {
 
     #[test]
     fn test_build_month_data_size_distribution() {
-        let config = Config::default().unwrap();
+        let config = Config::load().unwrap();
         let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
 
         let prs = vec![
@@ -783,7 +783,7 @@ mod tests {
 
     #[test]
     fn test_build_month_data_week_grouping() {
-        let config = Config::default().unwrap();
+        let config = Config::load().unwrap();
         let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap(); // Monday
 
         let prs = vec![
@@ -896,7 +896,7 @@ mod tests {
 
     #[test]
     fn test_ignored_prs_visible_in_detail_but_not_metrics() {
-        let mut config = Config::default().unwrap();
+        let mut config = Config::load().unwrap();
         config.filter.exclude_patterns.clear();
         config.filter.exclude_repos.clear();
         config.filter.ignore_repos.clear();
@@ -996,7 +996,7 @@ mod tests {
         fn test_compute_size_counts_sum_equals_input_count(
             pr_count in 1usize..100,
         ) {
-            let config = Config::default().unwrap();
+            let config = Config::load().unwrap();
             let base_date = Utc.with_ymd_and_hms(2024, 1, 15, 10, 0, 0).unwrap();
 
             let prs: Vec<PRData> = (0..pr_count).map(|i| {

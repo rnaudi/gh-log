@@ -16,7 +16,7 @@ use std::{fs, panic};
 /// # Examples
 /// ```rust,no_run
 /// # use gh_log::config::Config;
-/// let cfg = Config::default().expect("load config once");
+/// let cfg = Config::load().expect("load config once");
 /// println!("excluded repos: {}", cfg.filter.exclude_repos.len());
 /// ```
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
@@ -138,10 +138,10 @@ impl Config {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::config::Config;
-    /// let cfg = Config::default().expect("load config");
+    /// let cfg = Config::load().expect("load config");
     /// println!("{}", cfg.size.medium);
     /// ```
-    pub fn default() -> Result<Self> {
+    pub fn load() -> Result<Self> {
         let project_dirs =
             ProjectDirs::from("", "", "gh-log").context("Failed to determine config directory")?;
         let config_dir = project_dirs.config_dir().to_path_buf();
@@ -188,7 +188,7 @@ impl Config {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::config::Config;
-    /// let cfg = Config::default().expect("load config");
+    /// let cfg = Config::load().expect("load config");
     /// let skip_repo = cfg.should_exclude_repo("example/noise");
     /// println!("skip repo: {}", skip_repo);
     /// ```
@@ -201,7 +201,7 @@ impl Config {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::config::Config;
-    /// let cfg = Config::default().expect("load config");
+    /// let cfg = Config::load().expect("load config");
     /// let skip_title = cfg.should_exclude_pr_title("docs: update handbook");
     /// println!("skip title: {}", skip_title);
     /// ```
@@ -214,7 +214,7 @@ impl Config {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::config::Config;
-    /// let cfg = Config::default().expect("load config");
+    /// let cfg = Config::load().expect("load config");
     /// let ignore_repo = cfg.should_ignore_repo("example/playground");
     /// println!("ignore repo metrics: {}", ignore_repo);
     /// ```
@@ -227,7 +227,7 @@ impl Config {
     /// # Examples
     /// ```rust,no_run
     /// # use gh_log::config::Config;
-    /// let cfg = Config::default().expect("load config");
+    /// let cfg = Config::load().expect("load config");
     /// let ignore_title = cfg.should_ignore_pr_title("chore: update docs");
     /// println!("ignore title metrics: {}", ignore_title);
     /// ```
