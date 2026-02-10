@@ -33,6 +33,7 @@
 mod cache;
 mod config;
 mod data;
+mod export;
 mod github;
 mod view;
 
@@ -393,9 +394,9 @@ fn run_print_mode(month: &str, force: bool, format: OutputFormat) -> anyhow::Res
     let data = data::build_month_data(month, prs, reviewed_count, &cfg);
 
     match format {
-        OutputFormat::Raw => view::print_data(&data, month, &cfg.size),
-        OutputFormat::Json => view::print_json(&data, &cfg.size)?,
-        OutputFormat::Csv => view::print_csv(&data, &cfg.size)?,
+        OutputFormat::Raw => export::print_data(&data, month, &cfg.size),
+        OutputFormat::Json => export::print_json(&data, &cfg.size)?,
+        OutputFormat::Csv => export::print_csv(&data, &cfg.size)?,
     }
 
     Ok(())
