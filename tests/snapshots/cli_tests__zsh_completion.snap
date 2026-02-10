@@ -44,7 +44,7 @@ _arguments "${_arguments_options[@]}" : \
 _arguments "${_arguments_options[@]}" : \
 '--month=[Month in format YYYY-MM, e.g. 2025-11 (defaults to current month)]:YYYY-MM:_default' \
 '--force[Force refresh data from GitHub API, bypassing cache]' \
-'--json[Output data in JSON format]' \
+'(--csv)--json[Output data in JSON format]' \
 '--csv[Output data in CSV format]' \
 '-h[Print help (see more with '\''--help'\'')]' \
 '--help[Print help (see more with '\''--help'\'')]' \
