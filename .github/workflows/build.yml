@@ -35,7 +35,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked --target x86_64-unknown-linux-musl
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: gh-log-linux-musl-latest
           path: target/x86_64-unknown-linux-musl/release/gh-log
@@ -55,7 +55,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: gh-log-macos-latest
           path: target/release/gh-log
@@ -75,7 +75,7 @@ jobs:
       - name: Build release binary
         run: cargo build --release --locked
       - name: Upload artifact
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: gh-log-windows-latest
           path: target/release/gh-log.exe
