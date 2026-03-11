@@ -5,6 +5,8 @@ on:
     branches: [main]
   workflow_call:
 
+permissions: {}
+
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -48,17 +50,19 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-apple-darwin
       - uses: Swatinem/rust-cache@v2
         with:
           shared-key: "build-macos"
           cache-on-failure: true
       - name: Build release binary
-        run: cargo build --release --locked
+        run: cargo build --release --locked --target aarch64-apple-darwin
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
           name: gh-log-macos-latest
-          path: target/release/gh-log
+          path: target/aarch64-apple-darwin/release/gh-log
           retention-days: 7
 
   build-windows:

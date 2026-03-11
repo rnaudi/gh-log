@@ -5,6 +5,8 @@ on:
     branches: [main]
   workflow_call:
 
+permissions: {}
+
 env:
   RUST_BACKTRACE: 1
 
@@ -27,7 +29,12 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: clippy
-      - run: cargo clippy --all-targets --all-features -- -D warnings
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: "clippy"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+          cache-on-failure: true
+      - run: cargo clippy --locked --all-targets --all-features -- -D warnings
 
   test:
     name: Test
@@ -40,4 +47,4 @@ jobs:
           shared-key: "test"
           save-if: ${{ github.ref == 'refs/heads/main' }}
           cache-on-failure: true
-      - run: cargo test --all-features
+      - run: cargo test --locked --all-features
