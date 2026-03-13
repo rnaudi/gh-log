@@ -10,7 +10,7 @@ chrono = { version = "0.4", features = ["serde"] }
 ratatui = "0.30"
 crossterm = "0.29"
 clap = { version = "4.5.60", features = ["derive"] }
-clap_complete = "4.5"
+clap_complete = "4.6"
 regex = "1.12.3"
 anyhow = "1.0.102"
 directories = "6.0"
