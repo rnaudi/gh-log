@@ -82,7 +82,7 @@ jobs:
           generate_release_notes: true
 
       - name: Update Homebrew tap
-        uses: mislav/bump-homebrew-formula-action@v3
+        uses: mislav/bump-homebrew-formula-action@v4
         with:
           formula-name: gh-log
           homebrew-tap: rnaudi/homebrew-tap
