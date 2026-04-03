@@ -14,7 +14,7 @@ clap_complete = "4.6"
 regex = "1.12.3"
 anyhow = "1.0.102"
 directories = "6.0"
-toml = "1.0"
+toml = "1.1"
 
 [dev-dependencies]
 assert_cmd = "2.2"
